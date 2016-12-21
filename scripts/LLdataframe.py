@@ -74,6 +74,12 @@ from ast import literal_eval
 import tictocgen as tt
 
 from intercom import Intercom
+
+import os.path
+outputfolder=os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'output'))
+
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir)))
 from configs import pid,key
 Intercom.app_id = pid
 Intercom.app_api_key = key
@@ -88,16 +94,18 @@ timenowepoch=(timenow- datetime.datetime(1970,1,1)).total_seconds()
 
 #%%can check last updated at vs old dataframe to check for changes.
 #use that to pull the conversation and append to convdf instead of rebuilding df.
-convstatsf='convstats.csv'
-topconvstatsf='topconvstats.csv'
+
+
+convstatsf=os.path.abspath(os.path.join(outputfolder,'convstats.csv'))                 
+topconvstatsf=os.path.abspath(os.path.join(outputfolder,'topconvstats.csv'))                 
 #groupbyadmintatsf='groupbyadmintats.csv'
-userf='user.csv'
+userf=os.path.abspath(os.path.join(outputfolder,'user.csv'))                 
 filelist=[convstatsf,topconvstatsf,userf]
 dflist=['convdf','topconvdf','userdf']
 
 rebuildconvdf=True
 rebuildtopconvdf=True
-rebuilduser=False
+rebuilduser=True
 output=True
 toplot=False
 
@@ -108,7 +116,7 @@ timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed',
 #listlist=['issue','school']
 
 #df.Col3 = df.Col3.apply(literal_eval)
-import os.path
+#import os.path
 #load the files if rebuild is off #coerce may cause potential bugs !!!!!!!!!!!!!!
 for i,nfile in enumerate(filelist):
     if os.path.isfile(nfile):
@@ -286,7 +294,7 @@ print('Total Conversations: ' + str(totalconv))
 print('Time started: '+ str(datetime.datetime.now()))               
                
  
-#%%
+#%% create another dataframe with all conversation parts
 tt.tic()
 attrnames=['author','created_at','body','id','notified_at','part_type','assigned_to','url','attachments','subject']
 
@@ -402,6 +410,9 @@ def getfirstresponse(s):
 ## to combine into one to avoid constant transversing
 def getnumclosed(s):#find number of closed within conversation
     return len(convdf[(convdf.convid==s) & (convdf.part_type=='close')])
+    
+def getnumopened(s):#find number of closed within conversation
+    return len(convdf[(convdf.convid==s) & (convdf.part_type=='open')])    
     
 def getnumcomments(s):
     return len(convdf[(convdf.convid==s) & (convdf.part_type=='comment')])    
@@ -536,6 +547,7 @@ if rebuild[1]:
                                                                        'first_closed': getfirstclosed(s),
                                                                        'last_closed': getlastclosed(s),
                                                                        'numclosed': getnumclosed(s),
+                                                                       'numopened': getnumopened(s),
                                                                        'nummessage': getnumcomments(s),
                                                                        'numnote': getnumnotes(s), 
                                                                        'numassign': getnumassignments(s),
@@ -779,13 +791,14 @@ for i,tf in enumerate(timeframe):
 
 outputstats=True
 if outputstats:
-    with open('response_csv.csv', 'w') as f:
+    response_csv_path=os.path.abspath(os.path.join(outputfolder,'response_csv.csv'))
+    with open(response_csv_path, 'w') as f:
         stats[0][0].to_csv(f,sep='\t')
-            
-    with open('resolve_csv.csv', 'w') as f:
+    resolve_csv_path=os.path.abspath(os.path.join(outputfolder,'resolve_csv.csv'))        
+    with open(resolve_csv_path, 'w') as f:
         stats[0][1].to_csv(f,sep='\t')        
-        
-    with open('dailytagcount_csv.csv', 'w') as f: 
+    dailytagcount_csv_path=os.path.abspath(os.path.join(outputfolder,'dailytagcount_csv.csv'))            
+    with open(dailytagcount_csv_path, 'w') as f: 
         stats[0][4].to_csv(f,sep='\t')        
 
 #%% Tags by timeframe
@@ -1043,33 +1056,33 @@ def overallresponsestatplot(inputdf,ofilename):
 
 plotallconvobyadmin=True
 if plotallconvobyadmin:    
-    allconvobyadminplot(stats[0],'tagsbyAdmin.html')    
+    allconvobyadminplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyAdmin.html')))    
 
 plotoveralltags=True
 if plotoveralltags:
-    overalltagplot(stats[1],'Overalltagsformonth.html')
-    overalltagplot(stats[0],'Overalltagsforweek.html')
+    overalltagplot(stats[1],os.path.abspath(os.path.join(outputfolder,'Overalltagsformonth.html')))
+    overalltagplot(stats[0],os.path.abspath(os.path.join(outputfolder,'Overalltagsforweek.html')))
     
 plotopenconvobytf=True    
 if plotopenconvobytf:
-    openconvobytfplot(stats[0],'openbyday_1W.html')    
-    openconvobytfplot(stats[3],'openbyday_1Y.html')    
+    openconvobytfplot(stats[0],os.path.abspath(os.path.join(outputfolder,'openbyday_1W.html')))   
+    openconvobytfplot(stats[3],os.path.abspath(os.path.join(outputfolder,'openbyday_1Y.html')))    
     
 plottagsbyday=True
 if plottagsbyday:
-    tagsbytfplot(stats[0],'tagsbyday.html')
+    tagsbytfplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyday.html')))
             
 plotoverallresponsestats=True
 if plotoverallresponsestats:
-    overallresponsestatplot(stats[0],'overallresponse_1W.html') 
-    overallresponsestatplot(stats[1],'overallresponse_1M.html')     
+    overallresponsestatplot(stats[0],os.path.abspath(os.path.join(outputfolder,'overallresponse_1W.html'))) 
+    overallresponsestatplot(stats[1],os.path.abspath(os.path.join(outputfolder,'overallresponse_1M.html')))     
     #overallresponsestatplot(stats[2][7],'overallresponse_6M.html','6 Months')
     #overallresponsestatplot(stats[3][7],'overallresponse_1Y.html','Year') 
 
 plottagsbyschool=True
 if plottagsbyschool:
-    tagsbyschoolplot(stats[0],'tagsbyschool.html')
-    tagsbyschoolplot(stats[1],'tagsbyschool.html')
+    tagsbyschoolplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyschool.html')))
+    tagsbyschoolplot(stats[1],os.path.abspath(os.path.join(outputfolder,'tagsbyschool.html')))
     
 '''
 ilifetimestats=dict()
@@ -1171,7 +1184,7 @@ if toplot:
                         barmode='relative'                        
                         )
         fig = dict( data=[data1,data2,data3,data4,data5], layout=layout )        
-        plot(fig,filename=i+'.html')
+        plot(fig,filename=os.path.abspath(os.path.join(outputfolder,i+'.html')))
     
     
     
@@ -1200,6 +1213,7 @@ if output:
           del convdfcopy['body']
           del convdfcopy['subject']
           del convdfcopy['attachments']
+              
      convdfcopy.to_csv(convstatsf, sep='\t', encoding="utf-8")
      print('Written to '+convstatsf)
      
