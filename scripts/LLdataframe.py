@@ -647,8 +647,8 @@ for i,tf in enumerate(timeframe):
     #groupbyschool=issuedf.groupby('school')   
     groupbyschool=issuedf[['issue','school']]
     groupbyschool=groupbyschool.pivot_table(index='issue', columns='school', aggfunc=len, fill_value=0)
-    sumoftags=pd.DataFrame(groupbyschool.transpose().sum())
-    groupbyschool['Total']=sumoftags
+    #sumoftags=pd.DataFrame(groupbyschool.transpose().sum())
+    #groupbyschool['Total']=sumoftags
    
     #groupbyschoolstats=groupbyschool.describe()
     
@@ -1040,6 +1040,7 @@ if plotoverallresponsestats:
 plottagsbyschool=True
 if plottagsbyschool:
     tagsbyschoolplot(stats[0],'tagsbyschool.html')
+    tagsbyschoolplot(stats[1],'tagsbyschool.html')
     
 '''
 ilifetimestats=dict()
