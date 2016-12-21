@@ -13,7 +13,7 @@ Created on Wed Nov 16 16:19:36 2016
 #trang - 15dec
 #bug for trang tracked to conversations that have been closed/opened multiple times. 
 #Since algo uses first_closed to check, currently open conversations will be lose to the bin it was first_closed
-#
+#huh
 
 ########################################################################################################
 #To Do list

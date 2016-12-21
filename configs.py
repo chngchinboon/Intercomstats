@@ -1,2 +1,2 @@
-pid = 'id_test'
-key ='key_test'
+pid = 'id'
+key ='key'
