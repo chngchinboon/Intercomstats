@@ -140,7 +140,8 @@ tagdf=pd.DataFrame([x.__dict__ for x in Tag.all()])
 
 #group tags by issue
 issuename=['Admin','Apps','Attendance','Bug','Bulletins','Check In/Out','Checklist','Contact Sales Support','Feedback','Fees','Forward to Malaysia Team','Forward to School','Integration Issue',
-           'Internal:SPAM','LFR','Login Help','Logs','Moments','Notifications','Other Issue Type','Portfolio','Promotion','Wrong Parent Particulars','Weekly Digest','Change of Particulars','User Guide']
+           'Internal:SPAM','LFR','Login Help','Logs','Moments','Notifications','Other Issue Type','Portfolio','Promotion','Wrong Parent Particulars','Weekly Digest','Change of Particulars','User Guide'
+           'Duplicate','Wrong Recipient','Security Alert (Google)','General Enquiry']
 issuetag=tagdf[tagdf.name.isin(issuename)]
 
 #group tags by school
@@ -776,7 +777,7 @@ for i,tf in enumerate(timeframe):
 #[[x,l.count(x)] for x in set(listofissues)]
 #past week
 
-outputstats=False
+outputstats=True
 if outputstats:
     with open('response_csv.csv', 'w') as f:
         stats[0][0].to_csv(f,sep='\t')
@@ -817,7 +818,7 @@ def tagsbytfplot(inputpivtable,ofilename):
                     yaxis=dict(title='Conversations'),
                     xaxis=dict(title='Date'),
                     barmode='relative',
-                    yaxis2=dict(title='Time',titlefont=dict(color='rgb(148, 103, 189)'),
+                    yaxis2=dict(title='Time (hours)',titlefont=dict(color='rgb(148, 103, 189)'),
                                       tickfont=dict(color='rgb(148, 103, 189)'),
                                       overlaying='y', side='right'
                                   )
@@ -941,7 +942,35 @@ def overalltagplot(inputpivtable,ofilename):
                     )
     fig = dict(data=datao_piv, layout=layout )
     plot(fig,filename=ofilename)
-    
+#%%
+def overalltagplot2(inputpivtablelist,ofilename):
+    datalist=[]
+    nlist=[]
+
+    for idx,inputpivtable in enumerate(inputpivtablelist):
+        pivtable=inputpivtable[4].copy()#for the month
+        plottf=inputpivtable[-1]['tf']
+        start=inputpivtable[-1]['start']
+        end=inputpivtable[-1]['end']
+        n=inputpivtable[-1]['numconversations']    
+        #day_piv=pivtable.ix[:-2,:-1]
+        overall_piv=pivtable['Total'][:-2]   
+        x=overall_piv.index.tolist()
+        y=overall_piv.tolist()
+        datao_piv=Bar(x=x, y=y,name=plottf+' ( '+str(start)+' - '+str(end)+' )')
+        
+        datalist.append(datao_piv)
+        nlist.append(str(n))
+        
+    opstr='(' + ','.join(nlist) + ')'
+        
+    layout = Layout(title='Total conversations split by tags for past two '+ plottf + ', n = ' + opstr,
+                    yaxis=dict(title='Number'),
+                    xaxis=dict(title='Tags'),
+                    barmode='group'
+                    )
+    fig = dict(data=datalist, layout=layout )
+    plot(fig,filename=ofilename)    
 #%% overallresponse
 def overallresponsestatplot(inputdf,ofilename):
     responsestats=inputdf[7].copy()#past month
