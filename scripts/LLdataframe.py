@@ -101,15 +101,16 @@ topconvstatsf=os.path.abspath(os.path.join(outputfolder,'topconvstats.csv'))
 #groupbyadmintatsf='groupbyadmintats.csv'
 userf=os.path.abspath(os.path.join(outputfolder,'user.csv'))                 
 filelist=[convstatsf,topconvstatsf,userf]
-dflist=['convdf','topconvdf','userdf']
+#dflist=['convdf','topconvdf','userdf']
 
-rebuildconvdf=False
-rebuildtopconvdf=False
-rebuilduser=False
+#rebuildconvdf=False
+#rebuildtopconvdf=False
+#rebuilduser=False
 output=False
 toplot=False
 
-rebuild=[rebuildconvdf,rebuildtopconvdf,rebuilduser]
+#rebuild=[rebuildconvdf,rebuildtopconvdf,rebuilduser]
+rebuild=[[],[],[]]
 datetimeattrlist=['created_at','first_response','first_closed','last_closed','updated_at']
 datetimeattrspltlist=['created_at_Date','created_at_Time']
 timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed','s_to_last_update']
@@ -117,7 +118,9 @@ timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed',
 
 #df.Col3 = df.Col3.apply(literal_eval)
 #import os.path
+
 #load the files if rebuild is off #coerce may cause potential bugs !!!!!!!!!!!!!!
+'''
 for i,nfile in enumerate(filelist):
     if os.path.isfile(nfile):
         if not rebuild[i]:            
@@ -132,7 +135,49 @@ for i,nfile in enumerate(filelist):
             #for item in listlist:#trying to curnnot sure how to do
                 #exec("if hasattr(%s, item): %s[item] = %s[item].apply(literal_eval)" %(dflist[i],dflist[i],dflist[i]))            
             print('Loaded ' + dflist[i] + ' from ' + filelist[i])
-                          
+'''
+            
+#load csv files loadmode 0 = just load, 1 (default) = load and update check , 2 = don't load & full rebuild
+def loaddffiles(filelocation,loadmode=1):     
+     datetimeattrlist=['created_at','first_response','first_closed','last_closed','updated_at']
+     datetimeattrspltlist=['created_at_Date','created_at_Time']
+     timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed','s_to_last_update']
+     #check if file exists. if doesn't exist need to force rebuild anyway.
+     if os.path.isfile(filelocation):#update if exists          
+          print ('Found file at ' +filelocation)          
+     else: #rebuild if doesn't exist 
+          print ('Unable to find file at ' +filelocation)                    
+          loadmode=2
+     
+     if loadmode==0 or loadmode==1:
+          outputdf=pd.read_csv(filelocation, sep='\t', encoding='utf-8')
+          if hasattr(outputdf, 'Unnamed: 0'): del outputdf['Unnamed: 0']
+          if hasattr(outputdf, 'convid'): outputdf['convid']=outputdf['convid'].astype('unicode')#loading auto changes this to int
+          if hasattr(outputdf, 'assignee'): outputdf['assignee']=outputdf['assignee'].astype('unicode')#loading auto changes this to int
+          for item in datetimeattrlist+datetimeattrspltlist:               
+              if hasattr(outputdf, item): outputdf[item] = pd.to_datetime(outputdf[item],errors='coerce')
+          for item in timedeltaattrlist:                                  
+              if hasattr(outputdf, item): outputdf[item] = pd.to_timedelta(outputdf[item],errors='coerce')
+          
+          print ('Loaded file from ' + filelocation)          
+          if loadmode==1:
+               rebuild=True               
+          else:
+               rebuild=False               
+     else:
+          print ('Forcing rebuild...')          
+          rebuild=True          
+          outputdf=None  
+          
+     return outputdf, rebuild
+     
+#load userdf
+userdf, rebuild[2]=loaddffiles(userf,1)
+#load convdf
+convdf, rebuild[0]=loaddffiles(convstatsf,1)
+#load topconvdf
+topconvdf, rebuild[1]=loaddffiles(topconvstatsf,1) 
+     
 #%% Get admin info #small enough that can quickly get
 from intercom import Admin
 admindf=pd.DataFrame([x.__dict__ for x in Admin.all()]) 
@@ -160,6 +205,7 @@ print('Retrieved Issuetag and Schooltag Df from Intercom')
 #loading from csv may not give recent info. need to pull from intercom for latest
 from intercom import User
 userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
+'''
 if rebuild[2]:
     print('Retrieving users from Intercom. This will take awhile......')
     userdict=[]
@@ -184,6 +230,61 @@ if rebuild[2]:
     for attr in userdatetimeattrlist:
         userdf[attr]=pd.to_datetime(userdf[attr],unit='s')
     print('Retrieved as many users as allowed by python-intercom API')
+'''    
+        
+def getfewusers(df, obj, num):
+    userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
+    tempuserdict=[]
+    eof=False 
+    for idx in xrange(num): #get num of users
+        try:
+             tempuserdict.append(obj[0].__dict__.copy())
+                            
+        except Exception, err:
+             print (err)             
+             eof=True
+             break
+    
+    tempuserdf=pd.DataFrame(tempuserdict) 
+    #get missing users
+    if df is None:
+         missinguserdf=tempuserdf.copy()
+    else:
+         missinguserdf=tempuserdf[~tempuserdf.id.isin(df.id)].copy()
+    nummissing=len(missinguserdf)                                                          
+    for attr in userdatetimeattrlist:
+        missinguserdf[attr]=pd.to_datetime(missinguserdf[attr],unit='s')
+     
+    return missinguserdf, nummissing,eof
+     
+if rebuild[2]:
+    print('Retrieving recent users from Intercom. This may take awhile......')    
+    getmore=True    
+    userobj=User.all()
+    itercounter=1
+    retrievenumi=25
+    while getmore== True:
+         toget=retrievenumi*2**itercounter
+         missinguserdf,nummissing,eof=getfewusers(userdf,userobj,toget)
+         print('Found '+str(nummissing)+'/'+str(toget)+' missing users.')
+         userdf=pd.concat([userdf, missinguserdf], ignore_index=True)
+         print('Updated userdf')
+         itercounter+=1
+         
+         if nummissing>10:
+              getmore=True
+              print('Retrieving more to check')
+         else:
+              getmore=False
+              print('Missing users less than 10. Exiting while loop')     
+         if eof:
+              getmore=False
+              print ('Need to wait for scrolling api to be added by python API dev.')      
+    print('Completed retrieval of user')          
+    #for attr in userdatetimeattrlist:
+    #    userdf[attr]=pd.to_datetime(userdf[attr],unit='s',infer_datetime_format =True)
+    #print('Retrieved as many users as allowed by python-intercom API')
+
 #%% funky function
 #split datetime into date and time
 def splitdatetime(dataframe,attrlist):
@@ -203,7 +304,7 @@ def splitdatetime(dataframe,attrlist):
                dataframe[item+'_Time'] = temp.time               
                #dataframe[item+'_Time'] = pd.to_datetime(dataframe[item+'_Time'])
                #del dataframe[item]
-               
+#need to return new dataframe to be merged back. current implementation is terrible               
 #%%
 def getadminname(s,admindf):
      extractednamelist=admindf[admindf.id==s].name.values
@@ -215,8 +316,72 @@ def getadminname(s,admindf):
      
 #%% Get all conversations
 from intercom import Conversation
+
+def getfewconv(df, obj, num):
+    userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
+    tempdictlist=[]
+    eof=False 
+    for idx in xrange(num): #get num of convs
+        try:
+             tempdictlist.append(obj[0].__dict__.copy())                            
+        except Exception, err:
+             print (err)             
+             eof=True
+             break
+    
+    tempconvdf=pd.DataFrame(tempdictlist) 
+    tempconvdf=tempconvdf.rename(columns={ 'id' : 'convid'})
+    for attr in userdatetimeattrlist:
+        try: 
+             tempconvdf[attr]=pd.to_datetime(tempconvdf[attr],unit='s')
+        except KeyError:
+             pass
+    
+    if df is None:
+         missingconvdf=tempconvdf.copy()
+    else:
+         #get missing conversations
+         missingconvdf=tempconvdf[~tempconvdf.convid.isin(df.convid)].copy()#need to be augmented before joined back
+         #get conversations that are in loaded df
+         toupdateconvdf=df[df.convid.isin(tempconvdf.convid)].copy()
+         
+         retrievedtoupdate=tempconvdf[tempconvdf.convid.isin(df.convid)].copy() #need to be augmented before joined back
+         
+         newlyupdate=[retrievedtoupdate.updated_at-toupdateconvdf.updated_at]>0
+         
+         updatedconvdfa=retrievedtoupdate[newlyupdate]
+         updatedconvdfb=toupdateconvdf[~newlyupdate]
+         
+         #remaining conversations
+         remainingconvdf=df[~df.convid.isin(tempconvdf.convid)].copy()
+         
+         #need to be augmented before joined back
+         updatedconvdfa
+         missingconvdf
+         
+         #rejoin them all back
+         concat
+         
+         
+    numupdated=len(missingconvdf)+len(updatedconvdfa)
+    
+    
+         
+    
+    for attr in userdatetimeattrlist:
+        missingconvdf[attr]=pd.to_datetime(missingconvdf[attr],unit='s')
+     
+    return missingconvdf, numupdated,eof
+
+
+
+
+
 if rebuild[1]:
-     print ('Getting all Conversations from Intercom')
+     
+     convobj=Conversation.find_all()
+     '''     
+     print ('Getting recent Conversations from Intercom')
      tempdictlist=[]
      itercounter=1
      for item in Conversation.find_all():
@@ -242,7 +407,7 @@ if rebuild[1]:
      itercounter=1
      missinguserdf=0     
      df=[]
-     for index, row in topconvdf.iterrows():          
+     for index, row in topconvdf.iterrows():#handling missing users from intercom          
           try:        
                if itercounter%(int(totalconv/5))==0:#display progress counter
                       print('Processed ' + str(itercounter)+'/'+str(totalconv) + ' conversations')                     
@@ -274,7 +439,8 @@ if rebuild[1]:
           itercounter+=1
           #df=pd.Series([dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role'))])
      topconvdf=topconvdf.merge(pd.DataFrame(df),left_index=True, right_index=True)
-          
+     '''          
+     
      print('Extracted all conversations')              
      print('Found #' + str(missinguserdf)+ ' missing users')
      print('Updated userdf')
