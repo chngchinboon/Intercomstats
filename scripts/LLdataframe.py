@@ -340,46 +340,86 @@ def getfewconv(df, obj, num):
     if df is None:
          missingconvdf=tempconvdf.copy()
     else:
-         #get missing conversations
-         missingconvdf=tempconvdf[~tempconvdf.convid.isin(df.convid)].copy()#need to be augmented before joined back
+         #get missing conversations id
+         missingconvdf=tempconvdf[~tempconvdf.convid.isin(df.convid)]#need to be augmented before joined back         
+         nummissing=len(missingconvdf)
+         print('Found #' + str(nummissing) + '/' + str(num)+ ' conversations missing')
          #get conversations that are in loaded df
          toupdateconvdf=df[df.convid.isin(tempconvdf.convid)].copy()
          
-         retrievedtoupdate=tempconvdf[tempconvdf.convid.isin(df.convid)].copy() #need to be augmented before joined back
+         #slice from tempconvdf those that are present in df.convid
+         retrievedtoupdate=tempconvdf[tempconvdf.convid.isin(df.convid)].copy() 
          
-         newlyupdate=[retrievedtoupdate.updated_at-toupdateconvdf.updated_at]>0
-         
-         updatedconvdfa=retrievedtoupdate[newlyupdate]
-         updatedconvdfb=toupdateconvdf[~newlyupdate]
+         #compare values to see if recently updated. #possible source of errors                             
+         newlyupdate=retrievedtoupdate.updated_at.values>toupdateconvdf.updated_at.values
          
          #remaining conversations
-         remainingconvdf=df[~df.convid.isin(tempconvdf.convid)].copy()
+         #remainingconvdf=df[~df.convid.isin(tempconvdf.convid)].copy()
          
-         #need to be augmented before joined back
-         updatedconvdfa
-         missingconvdf
-         
-         #rejoin them all back
-         concat
+         numtochange=sum(newlyupdate)
+         print('Found #' + str(numtochange) + '/' + str(num) + ' conversations to be updated')
          
          
-    numupdated=len(missingconvdf)+len(updatedconvdfa)
-    
-    
+         #get id of those that needs to be updated
+         updatedconvdf=retrievedtoupdate[newlyupdate]#need to be augmented before joined back                      
          
-    
-    for attr in userdatetimeattrlist:
-        missingconvdf[attr]=pd.to_datetime(missingconvdf[attr],unit='s')
+         #get their index so that can slice out and replace
+         #toupdateindx=toupdateconvdf[newlyupdate].index
+         
+         #replace index
+         #updatedconvdf.set_index(toupdateindx)
+                           
+         tomerge=missingconvdf.append(updatedconvdf,ignore_index=True)
+         
+    numtoupdated=nummissing+numtochange
+
+    #for attr in userdatetimeattrlist:
+    #    df[attr]=pd.to_datetime(df[attr],unit='s')
      
-    return missingconvdf, numupdated,eof
+    return tomerge, numtoupdated, eof
 
 
+#can try to check for largest update_at in topconvdf
+#topconvdf.updated_at.max()
 
-
+#anything retrieved from intercom that has updated_at above this value has to be updated in the respective row of topconvdf
+#since conversation.find_all() will be arranged by updated_at
 
 if rebuild[1]:
-     
+     tomergedf=[]
      convobj=Conversation.find_all()
+     getmore=True          
+     retrievenumi=200
+     itercounter=1
+     while getmore== True:
+         toget=retrievenumi*2**itercounter
+         itercounter+=1
+         tomerge,numtoupdated,eof=getfewconv(topconvdf,convobj,toget)
+         print('Found total '+str(numtoupdated)+'/'+str(toget)+' conversations to update.')
+         
+         if tomerge is not None:
+             tomergedf=tomergedf.append(tomerge)
+         
+         #augment here?
+         print('Updated userdf')
+         
+         
+         if numtoupdated!=0:
+              getmore=True
+              
+              print('Retrieving more to check')
+         else:
+              getmore=False
+              print('Found no conversations to update. Exiting while loop')     
+         if eof:
+              getmore=False
+              print ('Need to wait for scrolling api to be added by python API dev.')      
+     print('Completed retrieval of user')
+     
+     
+     
+     
+     
      '''     
      print ('Getting recent Conversations from Intercom')
      tempdictlist=[]
