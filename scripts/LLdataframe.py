@@ -103,10 +103,10 @@ userf=os.path.abspath(os.path.join(outputfolder,'user.csv'))
 filelist=[convstatsf,topconvstatsf,userf]
 dflist=['convdf','topconvdf','userdf']
 
-rebuildconvdf=True
-rebuildtopconvdf=True
-rebuilduser=True
-output=True
+rebuildconvdf=False
+rebuildtopconvdf=False
+rebuilduser=False
+output=False
 toplot=False
 
 rebuild=[rebuildconvdf,rebuildtopconvdf,rebuilduser]
@@ -121,7 +121,7 @@ timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed',
 for i,nfile in enumerate(filelist):
     if os.path.isfile(nfile):
         if not rebuild[i]:            
-            exec("%s = pd.read_csv(\'%s\',sep='\t', encoding='utf-8')" %(dflist[i],filelist[i]))
+            exec("%s = pd.read_csv((\'%s\'), sep='\t', encoding='utf-8')" %(dflist[i],filelist[i]))
             exec("if hasattr(%s, 'Unnamed: 0'): del %s['Unnamed: 0']" %(dflist[i],dflist[i]))
             exec("if hasattr(%s, 'convid'): %s['convid']=%s['convid'].astype('unicode')" %(dflist[i],dflist[i],dflist[i]))
             exec("if hasattr(%s, 'assignee'): %s['assignee']=%s['assignee'].astype('unicode')" %(dflist[i],dflist[i],dflist[i]))
@@ -621,7 +621,7 @@ stats=[[[] for _ in range(9)] for _ in range(len(timeframe))]
 for i,tf in enumerate(timeframe):             
     #temptimedf=adminconvdfcopy.loc[adminconvdfcopy['created_at_Date'] >= i].copy()
     issuedf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= timeframedt[i]].copy()
-
+    #issuedf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= tfstart[i] and topconvdfcopy['created_at_Date'] >= tfend[i]].copy()
     #handling multiple tags    
     oissuedf=issuedf[issuedf['numissues']==0]#collect rows with issues equal to 0    
     missuedf=issuedf[issuedf['numissues']>0]#collect rows with issues greater than 1
