@@ -472,7 +472,7 @@ if rebuild[1]:
      tomergedf=tomergedf.merge(pd.DataFrame(df),left_index=True, right_index=True)
      
      print('Extracted all conversations to be merged')              
-     print('Found #' + str(itercounter)+ ' missing users')
+     print('Found #' + str(itercounter-1)+ ' conversations')
      print('Updated userdf')
                    
 else:
@@ -713,7 +713,7 @@ def changenonetoNone(s):    #
         return s
         
 def changenonetotimedeltazero(s):    #grrr
-    if s=='None':
+    if s=='None' or s is None:
         return pd.Timedelta(0)
     else:
         return s
@@ -738,6 +738,7 @@ def bintime(s,tunit,timebin,nanval):
     return binval        
 
 def recogtf(s,timebin):
+    timeframe=[7,30,180,365]
     tfstr=['Week','Month','6 Months','Year']    
     binout=bintime(pd.Timedelta(s),'D',timebin,0)
     binoutidx=[i for i,x in enumerate(timeframe) if x==binout]    
@@ -820,6 +821,9 @@ if rebuild[1]:
      topconvdfcopy['created_at']=pd.to_datetime(topconvdfcopy['created_at'],unit='s')
      #split datetime for created_at into two parts so that can do comparison for time binning
      #splitdatetime(topconvdfcopy,datetimeattrlist[0]) 
+     #convert timedelta obj to timedelta
+     for item in timedeltaattrlist:                                  
+              if hasattr(topconvdfcopy, item): topconvdfcopy[item] = pd.to_timedelta(topconvdfcopy[item],errors='coerce')
      
 else:
      topconvdfcopy=topconvdf.copy()
@@ -839,8 +843,12 @@ else:
 #%%group by tf
 print('Splitting by timeframe')
 timeframe=[7,30,180,365]
+timeframestart=[0,7,0,30,0,0]
+timeframeend=[7,14,30,60,180,365]
 #timeframe=[7]
-timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
+#timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
+timeframestartdt=[timenow.date()-datetime.timedelta(dt) for dt in timeframestart]
+timeframeenddt=[timenow.date()-datetime.timedelta(dt) for dt in timeframeend]
              
 #change none to string so that can group
 topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
@@ -850,11 +858,16 @@ topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
 #add end of created day
 topconvdfcopy['created_at_EOD']=topconvdfcopy.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
 
-stats=[[[] for _ in range(9)] for _ in range(len(timeframe))]     
-for i,tf in enumerate(timeframe):
-    print('Generating stats for timeframe: ' + str(tf))             
+#topconvdfcopy.reset_index(drop=True,inplace=True)
+
+stats=[[[] for _ in range(9)] for _ in range(len(timeframestart))]     
+for i,tf in enumerate(timeframestart):
+    print('Generating stats for timeframe: ' + str(tf) + ' to ' + str(timeframeend[i])+ ' days ago' )             
+    
+################################created_at_Date got problems!!!!!!!!!!!!!!!!!    
+    
     #temptimedf=adminconvdfcopy.loc[adminconvdfcopy['created_at_Date'] >= i].copy()
-    issuedf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= timeframedt[i]].copy()
+    issuedf=topconvdfcopy.loc[(topconvdfcopy['created_at_Date'] <= pd.to_datetime(timeframestartdt[i])) & (topconvdfcopy['created_at_Date'] >= pd.to_datetime(timeframeenddt[i]))].copy()
     #issuedf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= tfstart[i] and topconvdfcopy['created_at_Date'] >= tfend[i]].copy()
     #handling multiple tags    
     oissuedf=issuedf[issuedf['numissues']==0]#collect rows with issues equal to 0    
@@ -863,6 +876,8 @@ for i,tf in enumerate(timeframe):
     #Build new df 
     df=[]
     for index, row in missuedf.iterrows():                   
+        if type(row.issue)==unicode:
+            row.issue=row.issue[1:-1].split(', ')
         for issue in row.issue:            
             temprow=row.copy()#duplicate row
             temprow.issue=issue#replace multi issue of duplicated row with single issue
@@ -879,6 +894,8 @@ for i,tf in enumerate(timeframe):
     #Build new df 
     df=[]
     for index, row in mschooldf.iterrows():                           
+        if type(row.school)==unicode:
+            row.school=row.school[1:-1].split(', ')
         for school in row.school:            
             temprow=row.copy()#duplicate row
             temprow.school=school#replace multi sch of duplicated row with single sch
@@ -939,10 +956,10 @@ for i,tf in enumerate(timeframe):
     adminpivotdf['Total']=sumoftags
     
     #time to respond and resolve (for all). Duplicate. to re-write because i've screwed with the original df at top.
-    overallconvdf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= timeframedt[i]].copy()    
+    overallconvdf=topconvdfcopy.loc[(topconvdfcopy['created_at_Date'] <= timeframestartdt[i]) and (topconvdfcopy['created_at_Date'] >= timeframeenddt[i])].copy()    
     
     #add those still open but created before date.
-    openbeforetf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] < timeframedt[i]].copy()
+    openbeforetf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] < timeframeenddt[i]].copy()
     openbeforetf=openbeforetf.loc[openbeforetf['open'] ==1]
     
     opentagconvdf=overallconvdf.append(openbeforetf)
@@ -963,7 +980,7 @@ for i,tf in enumerate(timeframe):
     eodtdelta=opentagconvdf.first_closed.sub(opentagconvdf.created_at_EOD,axis=0)#<---------------usage of first closed misses conversations that have multiple close/openings.
     #forced into 0 bin.
         
-    eodbintf=range(1,1+timeframe[i])
+    eodbintf=range(1,1+ timeframeend[i]-timeframestart[i] )
     eodbin=eodtdelta.apply(lambda s: bintime(s,'D',eodbintf,pd.NaT))
     eodbin[eodbin.isnull()]=(datetime.datetime.now().date()-opentagconvdf.created_at_Date[eodbin.isnull()]).astype('timedelta64[D]')    
     openconvdf=opentagconvdf.assign(eodbin=eodbin.astype(int))
@@ -988,7 +1005,7 @@ for i,tf in enumerate(timeframe):
     opentagpivotdf=closedwithinaday.append(tempdf)
     opentagpivotdf=opentagpivotdf.sort_index()
     
-    opentagpivotdfsubset=opentagpivotdf[opentagpivotdf['created_at_Date']>= timeframedt[i]] #hide all those outside timeframe
+    opentagpivotdfsubset=opentagpivotdf[opentagpivotdf['created_at_Date']>= timeframeenddt[i]] #hide all those outside timeframe
     opentagpivotdf=opentagpivotdfsubset[['adminname','created_at_Date']].pivot_table(index='adminname', columns='created_at_Date', aggfunc=len, fill_value=0)    
     sumoftags=pd.DataFrame(opentagpivotdf.transpose().sum())        
     
@@ -1015,7 +1032,7 @@ for i,tf in enumerate(timeframe):
     stats[i][5]=adminpivotdf
     stats[i][6]=opentagpivotdf
     stats[i][7]=overallconvdf
-    stats[i][8]=dict(start=timeframedt[i],end=timenow.date(),numconversations=len(overallconvdf),tf=recogtf(timenow.date()-timeframedt[i],timeframe))
+    stats[i][8]=dict(start=timeframestartdt[i],end=timeframeenddt[i],numconversations=len(overallconvdf),tf=recogtf(timeframestartdt[i]-timeframeenddt[i],timeframeend[i]-timeframestart[i]+1))
     
 #for key, item in issuestats[1][0]:
 #    print issuestats[1][0].get_group(key), "\n\n"
@@ -1226,7 +1243,9 @@ def overallresponsestatplot(inputdf,ofilename):
     end=inputdf[-1]['end']
     responsestats=responsestats.sort_values('created_at',ascending=True)
     #convert 'None' str into None #this is a fucking terrible bandaid. Please fix soon
+    #responsestats['s_to_first_response']=responsestats.s_to_first_response.apply(lambda s: changenonetotimedeltazero(s))
     responsestats['s_to_last_closed']=responsestats.s_to_last_closed.apply(lambda s: changenonetotimedeltazero(s))
+    #responsestats['s_to_last_closed']=responsestats.s_to_last_closed.apply(lambda s: changenattotimedeltazero(s))
     responsestats['s_to_first_closed']=responsestats.s_to_first_closed.apply(lambda s: changenattotimedeltazero(s))
     responsestats['s_to_last_update']=responsestats.s_to_last_update.apply(lambda s: changenonetotimedeltazero(s))
     fr=responsestats['s_to_first_response'].astype('timedelta64[s]')
@@ -1315,8 +1334,8 @@ if plotoverallresponsestats:
 
 plottagsbyschool=True
 if plottagsbyschool:
-    tagsbyschoolplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyschool.html')))
-    tagsbyschoolplot(stats[1],os.path.abspath(os.path.join(outputfolder,'tagsbyschool.html')))
+    tagsbyschoolplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1W.html')))
+    tagsbyschoolplot(stats[1],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1Y.html')))
     
 '''
 ilifetimestats=dict()
