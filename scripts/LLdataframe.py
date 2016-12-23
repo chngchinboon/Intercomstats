@@ -194,7 +194,7 @@ tagdf=pd.DataFrame([x.__dict__ for x in Tag.all()])
 #group tags by issue
 issuename=['Admin','Apps','Attendance','Bug','Bulletins','Check In/Out','Checklist','Contact Sales Support','Feedback','Fees','Forward to Malaysia Team','Forward to School','Integration Issue',
            'Internal:SPAM','LFR','Login Help','Logs','Moments','Notifications','Other Issue Type','Portfolio','Promotion','Wrong Parent Particulars','Weekly Digest','Change of Particulars','User Guide'
-           'Duplicate','Wrong Recipient','Security Alert (Google)','General Enquiry']
+           'Duplicate','Wrong Recipient','Security Alert (Google)','General Enquiry','Spam']
 issuetag=tagdf[tagdf.name.isin(issuename)]
 
 #group tags by school
@@ -318,6 +318,10 @@ def getadminname(s,admindf):
 from intercom import Conversation
 
 def getfewconv(df, obj, num):
+    if topconvdf is not None:     
+         latestupdate=df.updated_at.max()
+    else:
+         latestupdate=None
     userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
     tempdictlist=[]
     eof=False 
@@ -329,14 +333,22 @@ def getfewconv(df, obj, num):
              eof=True
              break
     
-    tempconvdf=pd.DataFrame(tempdictlist) 
-    tempconvdf=tempconvdf.rename(columns={ 'id' : 'convid'})
+    tempconvdf=pd.DataFrame(tempdictlist)
+    
+    #print('Found #' + str(numtoupdate) + '/' + str(num) + ' conversations to be updated')
     for attr in userdatetimeattrlist:
         try: 
              tempconvdf[attr]=pd.to_datetime(tempconvdf[attr],unit='s')
         except KeyError:
              pass
+         
+    tempconvdf=tempconvdf[tempconvdf.updated_at > latestupdate]
+    tempconvdf=tempconvdf.rename(columns={ 'id' : 'convid'})
+    numtoupdate=len(tempconvdf)     
     
+    if numtoupdate==0:
+        eof=True
+    '''
     if df is None:
          missingconvdf=tempconvdf.copy()
     else:
@@ -375,8 +387,8 @@ def getfewconv(df, obj, num):
 
     #for attr in userdatetimeattrlist:
     #    df[attr]=pd.to_datetime(df[attr],unit='s')
-     
-    return tomerge, numtoupdated, eof
+    ''' 
+    return tempconvdf, numtoupdate, eof
 
 
 #can try to check for largest update_at in topconvdf
@@ -387,26 +399,25 @@ def getfewconv(df, obj, num):
 
 if rebuild[1]:
      tomergedf=[]
+          
      convobj=Conversation.find_all()
      getmore=True          
-     retrievenumi=200
+     retrievenumi=50
      itercounter=1
      while getmore== True:
          toget=retrievenumi*2**itercounter
-         itercounter+=1
+         
          tomerge,numtoupdated,eof=getfewconv(topconvdf,convobj,toget)
          print('Found total '+str(numtoupdated)+'/'+str(toget)+' conversations to update.')
          
          if tomerge is not None:
-             tomergedf=tomergedf.append(tomerge)
-         
-         #augment here?
-         print('Updated userdf')
-         
-         
+             if itercounter==1:
+                 tomergedf=tomerge.copy()
+             else:
+                 tomergedf=tomergedf.append(tomerge)
+                  
          if numtoupdated!=0:
-              getmore=True
-              
+              getmore=True              
               print('Retrieving more to check')
          else:
               getmore=False
@@ -414,40 +425,20 @@ if rebuild[1]:
          if eof:
               getmore=False
               print ('Need to wait for scrolling api to be added by python API dev.')      
-     print('Completed retrieval of user')
-     
-     
-     
-     
-     
-     '''     
-     print ('Getting recent Conversations from Intercom')
-     tempdictlist=[]
-     itercounter=1
-     for item in Conversation.find_all():
-         tempdictlist.append(item.to_dict.copy())
          
-         try:        
-             if itercounter%(250)==0:#display progress counter
-                 print('Retrieved ' + str(itercounter) + ' conversations')                     
-         except ZeroDivisionError: 
-             pass  
          itercounter+=1
+     print('Completed retrieval of conversations that need to be updated.')
      
-     totalconv=len(tempdictlist)
-     print('Retrieved ' + str(totalconv) + ' conversations')                     
-     
-     topconvdf=pd.DataFrame(tempdictlist) 
-     
+     totalconv=len(tomergedf)
      #convert id
-     topconvdf.assignee=topconvdf.assignee.apply(lambda s: s.id)
-     topconvdf['adminname']=topconvdf.assignee.apply(lambda s: getadminname(s,admindf))
-     topconvdf.user=topconvdf.user.apply(lambda s: s.id)
-              
+     tomergedf.assignee=tomergedf.assignee.apply(lambda s: s.id)
+     tomergedf['adminname']=tomergedf.assignee.apply(lambda s: getadminname(s,admindf))
+     tomergedf.user=tomergedf.user.apply(lambda s: s.id)
+     
      itercounter=1
      missinguserdf=0     
      df=[]
-     for index, row in topconvdf.iterrows():#handling missing users from intercom          
+     for index, row in tomergedf.iterrows():#handling missing users from intercom          
           try:        
                if itercounter%(int(totalconv/5))==0:#display progress counter
                       print('Processed ' + str(itercounter)+'/'+str(totalconv) + ' conversations')                     
@@ -478,21 +469,12 @@ if rebuild[1]:
           df.append(dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role')))                                                            
           itercounter+=1
           #df=pd.Series([dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role'))])
-     topconvdf=topconvdf.merge(pd.DataFrame(df),left_index=True, right_index=True)
-     '''          
+     tomergedf=tomergedf.merge(pd.DataFrame(df),left_index=True, right_index=True)
      
-     print('Extracted all conversations')              
-     print('Found #' + str(missinguserdf)+ ' missing users')
+     print('Extracted all conversations to be merged')              
+     print('Found #' + str(itercounter)+ ' missing users')
      print('Updated userdf')
-     
-     #rename so that it doesn't conflict when pulling conversation parts
-     topconvdf=topconvdf.rename(columns={ 'id' : 'convid'})
-     #convert columns with datetime strings to datetime objects
-     topconvdf['updated_at']=pd.to_datetime(topconvdf['updated_at'],unit='s')
-     topconvdf['created_at']=pd.to_datetime(topconvdf['created_at'],unit='s')
-     #split datetime for created_at into two parts so that can do comparison for time binning
-     splitdatetime(topconvdf,datetimeattrlist[0])          
-     
+                   
 else:
      print ('Load All conversations from csv')     
      totalconv=len(topconvdf.index)     
@@ -509,7 +491,7 @@ if rebuild[0]:
      print('Retrieving full content of conversations from Intercom')
      itercounter=1     
      
-     for convid in topconvdf.convid:
+     for convid in tomergedf.convid:
           try:        
                if itercounter%(int(totalconv/10))==0:#display progress counter
                       print('Processing ' + str(itercounter)+'/'+str(totalconv) + ' conversations')                     
@@ -595,14 +577,28 @@ if rebuild[0]:
                       
           itercounter+=1
           
-     convdf=pd.DataFrame(conv)
-     print('Built convdf')
+     convdftomerge=pd.DataFrame(conv)
+     print('Built convdftomerge')
      
      #convert possible datetime strings to datetime objects
-     convdf['notified_at']=pd.to_datetime(convdf['notified_at'],unit='s')
+     convdftomerge['notified_at']=pd.to_datetime(convdftomerge['notified_at'],unit='s')
+     
+     #seems like can merge here
+     if convdf is not None:
+         #update values in common rows
+         common=convdftomerge[convdftomerge.convid.isin(convdf.convid) & convdftomerge.idx_conv.isin(convdf.idx_conv)]
+         convdf.update(common)
+         #append missing rows
+         missing=convdftomerge[~(convdftomerge.convid.isin(convdf.convid) & convdftomerge.idx_conv.isin(convdf.idx_conv))]
+         convdf=convdf.append(missing)
+         print('Updated convdf with convdftomerge')
+     else:
+         print('Convdf empty, using convdftomerge instead')
+         convdf=convdftomerge
+     
      #convdf['created_at']=pd.to_datetime(convdf['created_at'],unit='s')
      #split datetime into two parts so that can do comparison for time binning
-     splitdatetime(convdf,datetimeattrlist)
+     splitdatetime(convdftomerge,datetimeattrlist)
 else:
      print ('Loaded Conversations from csv')   
 
@@ -610,41 +606,44 @@ tt.toc()
 
 #%% Calculate values to update adminconvdf
 #Find response time 
-def getfirstresponse(s):
-    return convdf[(convdf.convid==s) & (convdf.idx_conv==1)].created_at.values[0]
-
+def getfirstresponse(s,refconvdf):    
+    firstrsp=refconvdf[(refconvdf.convid==s) & (refconvdf.idx_conv==1)]
+    if not firstrsp.empty:
+        return firstrsp.created_at.values[0]
+    else: 
+        return None
 ## to combine into one to avoid constant transversing
-def getnumclosed(s):#find number of closed within conversation
-    return len(convdf[(convdf.convid==s) & (convdf.part_type=='close')])
+def getnumclosed(s,refconvdf):#find number of closed within conversation
+    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')])
     
-def getnumopened(s):#find number of closed within conversation
-    return len(convdf[(convdf.convid==s) & (convdf.part_type=='open')])    
+def getnumopened(s,refconvdf):#find number of closed within conversation
+    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='open')])    
     
-def getnumcomments(s):
-    return len(convdf[(convdf.convid==s) & (convdf.part_type=='comment')])    
+def getnumcomments(s,refconvdf):
+    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='comment')])    
     
-def getnumnotes(s):
-    return len(convdf[(convdf.convid==s) & (convdf.part_type=='note')])    
+def getnumnotes(s,refconvdf):
+    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='note')])    
 
-def getnumassignments(s):
-    return len(convdf[(convdf.convid==s) & (convdf.part_type=='assignment')])        
+def getnumassignments(s,refconvdf):
+    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='assignment')])        
         
 #Find first closed time
-def getfirstclosed(s):
-    if getnumclosed(s)>0:
-         return convdf[(convdf.convid==s) & (convdf.part_type=='close')].head(1).created_at.values[0]
+def getfirstclosed(s,refconvdf):
+    if getnumclosed(s,refconvdf)>0:
+         return refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')].head(1).created_at.values[0]
     else: 
          return None
 #last closed time          
-def getlastclosed(s):
-    if getnumclosed(s)>0:
-         return convdf[(convdf.convid==s) & (convdf.part_type=='close')].tail(1).created_at.values[0]
+def getlastclosed(s,refconvdf):
+    if getnumclosed(s,refconvdf)>0:
+         return refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')].tail(1).created_at.values[0]
     else: 
          return None
          
-def gettotaltags(s):         
+def gettotaltags(s,refconvdf):         
      taglist=[]     
-     for ptag in convdf[(convdf.convid==s)].tags.values:
+     for ptag in refconvdf[(refconvdf.convid==s)].tags.values:
           if type(ptag)==str or type(ptag)==unicode:
                ptag=ptag[1:-1].split(', ')        #possible source of error.. added space to cater for reading in csv.       
           if ptag:
@@ -656,10 +655,10 @@ def gettotaltags(s):
      return taglist
      
              
-def getschool(s):
+def getschool(s,refconvdf):
      #some conversation might be forward by admin through email and thus not suitable to check user for details.
      #check if empty     
-     taglist=gettotaltags(s)     
+     taglist=gettotaltags(s,refconvdf)     
      schoolname=list(set(schooltag.name.values).intersection(taglist))
      if not schoolname:
           return None
@@ -683,9 +682,9 @@ def getschool(s):
           schoolname=list(set(schooltag.name.values).intersection(taglist))
           return schoolname
      '''
-def getissue(s):     
+def getissue(s,refconvdf):     
      #check if empty
-     taglist=gettotaltags(s)
+     taglist=gettotaltags(s,refconvdf)
      issuename=list(set(issuetag.name.values).intersection(taglist))     
      if not issuename:
           return None
@@ -694,7 +693,7 @@ def getissue(s):
 
 def countissue(s):    #assuming issues are in list
     if s:
-        if type(s)==str:
+        if type(s)==str or type(s)==float:
             return 0
         else:
             return len(s)
@@ -747,19 +746,19 @@ def recogtf(s,timebin):
 if rebuild[1]:
      print('Building additional info for each conversation')
      #response=[]
-     topconvdfcopy=topconvdf.copy()#keep original so that don't mess
-     
-     generateddf=topconvdfcopy.convid.apply(lambda s: pd.Series({'first_response':getfirstresponse(s),
-                                                                       'first_closed': getfirstclosed(s),
-                                                                       'last_closed': getlastclosed(s),
-                                                                       'numclosed': getnumclosed(s),
-                                                                       'numopened': getnumopened(s),
-                                                                       'nummessage': getnumcomments(s),
-                                                                       'numnote': getnumnotes(s), 
-                                                                       'numassign': getnumassignments(s),
-                                                                       'numtags': len(gettotaltags(s)),                                                                  
-                                                                       'issue': getissue(s),#duplicate
-                                                                       'school': getschool(s),#duplicate
+     toaugment=tomergedf.copy()#keep original so that don't mess     
+          
+     generateddf=toaugment.convid.apply(lambda s: pd.Series({'first_response':getfirstresponse(s,convdf),
+                                                                       'first_closed': getfirstclosed(s,convdf),
+                                                                       'last_closed': getlastclosed(s,convdf),
+                                                                       'numclosed': getnumclosed(s,convdf),
+                                                                       'numopened': getnumopened(s,convdf),
+                                                                       'nummessage': getnumcomments(s,convdf),
+                                                                       'numnote': getnumnotes(s,convdf), 
+                                                                       'numassign': getnumassignments(s,convdf),
+                                                                       'numtags': len(gettotaltags(s,convdf)),                                                                  
+                                                                       'issue': getissue(s,convdf),#duplicate
+                                                                       'school': getschool(s,convdf),#duplicate
                                                                             }))
          
          #getschooldf=adminconvdfcopy.convid.apply(lambda s: pd.Series({'school': getschool(s)}))    
@@ -767,34 +766,60 @@ if rebuild[1]:
          #subtracting. not sure whats the shift() for
          #df['col'] - df['col'].shift()
      
+     #some missing values need to change to be able to manipulate
+     for item in datetimeattrlist+datetimeattrspltlist:               
+              if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],errors='coerce')
+     
      #get response,firstclose,lastclose timedelta
-     tdeltadf=generateddf[['first_response', 'first_closed','last_closed']].sub(topconvdfcopy['created_at'], axis=0)
+     tdeltadf=generateddf[['first_response', 'first_closed','last_closed']].sub(toaugment['created_at'], axis=0)
      tdeltadf.columns = ['s_to_first_response', 's_to_first_closed','s_to_last_closed']
-     tudeltadf=topconvdfcopy[['updated_at']].sub(topconvdfcopy['created_at'], axis=0)
+     tudeltadf=toaugment[['updated_at']].sub(toaugment['created_at'], axis=0)
      tudeltadf.columns = ['s_to_last_update']
      
-     topconvdfcopy=topconvdfcopy.merge(generateddf, left_index=True, right_index=True)
-     topconvdfcopy=topconvdfcopy.merge(tdeltadf, left_index=True, right_index=True)
-     topconvdfcopy=topconvdfcopy.merge(tudeltadf, left_index=True, right_index=True)
+     toaugment=toaugment.merge(generateddf, left_index=True, right_index=True)
+     toaugment=toaugment.merge(tdeltadf, left_index=True, right_index=True)
+     toaugment=toaugment.merge(tudeltadf, left_index=True, right_index=True)
      #adminconvdfcopy.merge(getschooldf, left_index=True, right_index=True)
      print('Additional info for each conversation')     
      
      #change open to 1 for easier understanding
-     topconvdfcopy['open']=topconvdfcopy.open.apply(lambda s: s*1)    
+     toaugment['open']=toaugment.open.apply(lambda s: s*1)    
      #change none to string so that can group
-     topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
+     toaugment['issue']=toaugment.issue.apply(lambda s: changenonetostr(s))
      #change none to string so that can group
-     topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
+     toaugment['school']=toaugment.school.apply(lambda s: changenonetostr(s))
      #count issues
-     topconvdfcopy['numissues']=topconvdfcopy.issue.apply(lambda s: countissue(s))    
+     toaugment['numissues']=toaugment.issue.apply(lambda s: countissue(s))    
      
      #bintime for pivot tables
-     topconvdfcopy['s_response_bin']=topconvdfcopy.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+     toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
      #can't print if type is replaced with str None
      #Have to fill nattype with none first #this screws with plotly.
-     topconvdfcopy['s_to_last_closed'] = topconvdfcopy.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
+     toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
                                            and not isinstance(x, pd.tslib.NaTType) else 'None')    
-     topconvdfcopy['s_resolve_bin']=topconvdfcopy.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+     toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+     
+     #merge the missing files     
+     if topconvdf is not None:
+         #update values in common rows
+         common=toaugment[toaugment.convid.isin(topconvdf.convid)]
+         temptopconvdf=topconvdf.copy()
+         temptopconvdf.update(common)
+         #append missing rows
+         missing=toaugment[~toaugment.convid.isin(topconvdf.convid)]
+         topconvdfcopy=temptopconvdf.append(missing)
+         print('Updated topconvdfcopy with toaugment')
+                  
+     else:
+         print('topconvdf empty, using toaugment instead')
+         topconvdfcopy=toaugment
+     #rename so that it doesn't conflict when pulling conversation parts
+     #topconvdf=topconvdf.rename(columns={ 'id' : 'convid'})
+     #convert columns with datetime strings to datetime objects
+     topconvdfcopy['updated_at']=pd.to_datetime(topconvdfcopy['updated_at'],unit='s')
+     topconvdfcopy['created_at']=pd.to_datetime(topconvdfcopy['created_at'],unit='s')
+     #split datetime for created_at into two parts so that can do comparison for time binning
+     #splitdatetime(topconvdfcopy,datetimeattrlist[0]) 
      
 else:
      topconvdfcopy=topconvdf.copy()
@@ -810,7 +835,9 @@ else:
      
      print('Metrics loaded from csv')                      
 
+
 #%%group by tf
+print('Splitting by timeframe')
 timeframe=[7,30,180,365]
 #timeframe=[7]
 timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
@@ -824,7 +851,8 @@ topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
 topconvdfcopy['created_at_EOD']=topconvdfcopy.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
 
 stats=[[[] for _ in range(9)] for _ in range(len(timeframe))]     
-for i,tf in enumerate(timeframe):             
+for i,tf in enumerate(timeframe):
+    print('Generating stats for timeframe: ' + str(tf))             
     #temptimedf=adminconvdfcopy.loc[adminconvdfcopy['created_at_Date'] >= i].copy()
     issuedf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= timeframedt[i]].copy()
     #issuedf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= tfstart[i] and topconvdfcopy['created_at_Date'] >= tfend[i]].copy()
