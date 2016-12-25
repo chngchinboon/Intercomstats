@@ -77,6 +77,7 @@ from intercom import Intercom
 
 import os.path
 outputfolder=os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'output'))
+#outputfolder=u'E:\\Boon\\intercomstats\\output'
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir)))
@@ -139,42 +140,59 @@ for i,nfile in enumerate(filelist):
             
 #load csv files loadmode 0 = just load, 1 (default) = load and update check , 2 = don't load & full rebuild
 def loaddffiles(filelocation,loadmode=1):     
-     datetimeattrlist=['created_at','first_response','first_closed','last_closed','updated_at']
-     datetimeattrspltlist=['created_at_Date','created_at_Time']
-     timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed','s_to_last_update']
-     #check if file exists. if doesn't exist need to force rebuild anyway.
-     if os.path.isfile(filelocation):#update if exists          
-          print ('Found file at ' +filelocation)          
-     else: #rebuild if doesn't exist 
-          print ('Unable to find file at ' +filelocation)                    
-          loadmode=2
+    datetimeattrlist=['created_at','first_response','first_closed','last_closed','updated_at']
+    datetimeattrspltlist=['created_at_Date','created_at_Time']
+    timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed','s_to_last_update']
+    #check if file exists. if doesn't exist need to force rebuild anyway.
+    if os.path.isfile(filelocation):#update if exists          
+        print ('Found file at ' +filelocation)          
+    else: #rebuild if doesn't exist 
+        print ('Unable to find file at ' +filelocation)                    
+        loadmode=2
      
-     if loadmode==0 or loadmode==1:
-          outputdf=pd.read_csv(filelocation, sep='\t', encoding='utf-8')
-          if hasattr(outputdf, 'Unnamed: 0'): del outputdf['Unnamed: 0']
-          if hasattr(outputdf, 'convid'): outputdf['convid']=outputdf['convid'].astype('unicode')#loading auto changes this to int
-          if hasattr(outputdf, 'assignee'): outputdf['assignee']=outputdf['assignee'].astype('unicode')#loading auto changes this to int
-          for item in datetimeattrlist+datetimeattrspltlist:               
-              if hasattr(outputdf, item): outputdf[item] = pd.to_datetime(outputdf[item],errors='coerce')
-          for item in timedeltaattrlist:                                  
-              if hasattr(outputdf, item): outputdf[item] = pd.to_timedelta(outputdf[item],errors='coerce')
+    if loadmode==0 or loadmode==1:
+        outputdf=pd.read_csv(filelocation, sep='\t', encoding='utf-8',index_col=0)
+        #if hasattr(outputdf, 'Unnamed: 0'): del outputdf['Unnamed: 0']
+        if hasattr(outputdf, 'convid'): outputdf['convid']=outputdf['convid'].astype('unicode')#loading auto changes this to int
+        if hasattr(outputdf, 'assignee'): outputdf['assignee']=outputdf['assignee'].astype('unicode')#loading auto changes this to int
+        for item in datetimeattrlist+datetimeattrspltlist:               
+            if hasattr(outputdf, item): outputdf[item] = pd.to_datetime(outputdf[item],errors='coerce')
+        for item in timedeltaattrlist:                                  
+            if hasattr(outputdf, item): outputdf[item] = pd.to_timedelta(outputdf[item],errors='coerce')
           
-          print ('Loaded file from ' + filelocation)          
-          if loadmode==1:
-               rebuild=True               
-          else:
-               rebuild=False               
-     else:
+        print ('Loaded file from ' + filelocation)          
+        if loadmode==1:
+             rebuild=True               
+        else:
+             rebuild=False               
+    else:
           print ('Forcing rebuild...')          
           rebuild=True          
           outputdf=None  
           
-     return outputdf, rebuild
+    return outputdf, rebuild
      
 #load userdf
 userdf, rebuild[2]=loaddffiles(userf,1)
+if userdf is not None:
+    #force into types as if we loaded manually
+    del userdf['Unnamed: 0']
+    userdf['anonymous']=userdf['anonymous'].astype(bool)
+    userdf['unsubscribed_from_emails']=userdf['unsubscribed_from_emails'].astype(bool)        
+    userdf['session_count']=userdf['session_count'].astype('int64') 
+    
+    #might want to combine this with top
+    userdf['created_at']=pd.to_datetime(userdf['created_at'],errors='coerce')
+    userdf['last_request_at']=pd.to_datetime(userdf['last_request_at'],errors='coerce')
+    userdf['remote_created_at']=pd.to_datetime(userdf['remote_created_at'],errors='coerce')
+    userdf['signed_up_at']=pd.to_datetime(userdf['signed_up_at'],errors='coerce')
+    userdf['updated_at']=pd.to_datetime(userdf['updated_at'],errors='coerce')
+    #updated_at can be used to check if needs updating
+        
 #load convdf
 convdf, rebuild[0]=loaddffiles(convstatsf,1)
+    #['tags'] need to be split into a list
+
 #load topconvdf
 topconvdf, rebuild[1]=loaddffiles(topconvstatsf,1) 
      
@@ -192,11 +210,17 @@ from intercom import Tag
 tagdf=pd.DataFrame([x.__dict__ for x in Tag.all()])
 
 #group tags by issue
-issuename=['Admin','Apps','Attendance','Bug','Bulletins','Check In/Out','Checklist','Contact Sales Support','Feedback','Fees','Forward to Malaysia Team','Forward to School','Integration Issue',
-           'Internal:SPAM','LFR','Login Help','Logs','Moments','Notifications','Other Issue Type','Portfolio','Promotion','Wrong Parent Particulars','Weekly Digest','Change of Particulars','User Guide'
-           'Duplicate','Wrong Recipient','Security Alert (Google)','General Enquiry','Spam']
-issuetag=tagdf[tagdf.name.isin(issuename)]
+issuename=['Admin','Apps','Attendance','Bug','Bulletins','Check In/Out',
+           'Checklist','Contact Sales Support','Feedback','Fees',
+           'Forward to Malaysia Team','Forward to School','Integration Issue',
+           'Internal:SPAM','LFR','Login Help','Logs','Moments','Notifications',
+           'Other Issue Type','Portfolio','Promotion','Wrong Parent Particulars',
+           'Weekly Digest','Change of Particulars','User Guide', 'Duplicate',
+           'Wrong Recipient','Security Alert (Google)','General Enquiry','Spam',
+           'User Guide','Mailgun','Yahoo Mail Block', 'Yahoo Mail Throttle/Block']
 
+issuetag=tagdf[tagdf.name.isin(issuename)] 
+               
 #group tags by school
 schooltag=tagdf[~tagdf.name.isin(issuename)]
                 
@@ -232,7 +256,7 @@ if rebuild[2]:
     print('Retrieved as many users as allowed by python-intercom API')
 '''    
         
-def getfewusers(df, obj, num):
+def getfewusers(df, obj, num):#consider using updated_at to check if user needs to be updated!
     userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
     tempuserdict=[]
     eof=False 
@@ -262,7 +286,11 @@ if rebuild[2]:
     getmore=True    
     userobj=User.all()
     itercounter=1
-    retrievenumi=25
+    if userdf is None:
+        print('Userdf missing. Rebuilding from scratch')
+        retrievenumi=100    
+    else:
+        retrievenumi=25
     while getmore== True:
          toget=retrievenumi*2**itercounter
          missinguserdf,nummissing,eof=getfewusers(userdf,userobj,toget)
@@ -284,6 +312,8 @@ if rebuild[2]:
     #for attr in userdatetimeattrlist:
     #    userdf[attr]=pd.to_datetime(userdf[attr],unit='s',infer_datetime_format =True)
     #print('Retrieved as many users as allowed by python-intercom API')
+    
+    
 
 #%% funky function
 #split datetime into date and time
@@ -317,98 +347,47 @@ def getadminname(s,admindf):
 #%% Get all conversations
 from intercom import Conversation
 
-def getfewconv(df, obj, num):
-    if topconvdf is not None:     
-         latestupdate=df.updated_at.max()
+def getfewconv(df, convobj, num):
+    if df is not None:     
+         latestupdate=df.updated_at.max() #latest update available in df.
     else:
-         latestupdate=None
-    userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
+         latestupdate=pd.to_datetime(0)
+             
     tempdictlist=[]
     eof=False 
     for idx in xrange(num): #get num of convs
         try:
-             tempdictlist.append(obj[0].__dict__.copy())                            
+             tempdictlist.append(convobj[0].__dict__.copy())                            
         except Exception, err:
              print (err)             
              eof=True
              break
     
     tempconvdf=pd.DataFrame(tempdictlist)
-    
-    #print('Found #' + str(numtoupdate) + '/' + str(num) + ' conversations to be updated')
-    for attr in userdatetimeattrlist:
-        try: 
-             tempconvdf[attr]=pd.to_datetime(tempconvdf[attr],unit='s')
-        except KeyError:
-             pass
-         
-    tempconvdf=tempconvdf[tempconvdf.updated_at > latestupdate]
-    tempconvdf=tempconvdf.rename(columns={ 'id' : 'convid'})
+    #collect only those later than the df
+    tempconvdf=tempconvdf[pd.to_datetime(tempconvdf.updated_at) > latestupdate]    
     numtoupdate=len(tempconvdf)     
     
     if numtoupdate==0:
         eof=True
-    '''
-    if df is None:
-         missingconvdf=tempconvdf.copy()
-    else:
-         #get missing conversations id
-         missingconvdf=tempconvdf[~tempconvdf.convid.isin(df.convid)]#need to be augmented before joined back         
-         nummissing=len(missingconvdf)
-         print('Found #' + str(nummissing) + '/' + str(num)+ ' conversations missing')
-         #get conversations that are in loaded df
-         toupdateconvdf=df[df.convid.isin(tempconvdf.convid)].copy()
-         
-         #slice from tempconvdf those that are present in df.convid
-         retrievedtoupdate=tempconvdf[tempconvdf.convid.isin(df.convid)].copy() 
-         
-         #compare values to see if recently updated. #possible source of errors                             
-         newlyupdate=retrievedtoupdate.updated_at.values>toupdateconvdf.updated_at.values
-         
-         #remaining conversations
-         #remainingconvdf=df[~df.convid.isin(tempconvdf.convid)].copy()
-         
-         numtochange=sum(newlyupdate)
-         print('Found #' + str(numtochange) + '/' + str(num) + ' conversations to be updated')
-         
-         
-         #get id of those that needs to be updated
-         updatedconvdf=retrievedtoupdate[newlyupdate]#need to be augmented before joined back                      
-         
-         #get their index so that can slice out and replace
-         #toupdateindx=toupdateconvdf[newlyupdate].index
-         
-         #replace index
-         #updatedconvdf.set_index(toupdateindx)
-                           
-         tomerge=missingconvdf.append(updatedconvdf,ignore_index=True)
-         
-    numtoupdated=nummissing+numtochange
-
-    #for attr in userdatetimeattrlist:
-    #    df[attr]=pd.to_datetime(df[attr],unit='s')
-    ''' 
+    
     return tempconvdf, numtoupdate, eof
 
-
-#can try to check for largest update_at in topconvdf
-#topconvdf.updated_at.max()
-
-#anything retrieved from intercom that has updated_at above this value has to be updated in the respective row of topconvdf
-#since conversation.find_all() will be arranged by updated_at
-
 if rebuild[1]:
+     if convdf is None:
+         print ('Convdf is empty. Rebuilding from scratch')
+     
      tomergedf=[]
-          
      convobj=Conversation.find_all()
      getmore=True          
      retrievenumi=50
      itercounter=1
+     updatenumaccu=0
      while getmore== True:
-         toget=retrievenumi*2**itercounter
+         toget=retrievenumi*2**itercounter#exponentially increase number of conversations to get
          
          tomerge,numtoupdated,eof=getfewconv(topconvdf,convobj,toget)
-         print('Found total '+str(numtoupdated)+'/'+str(toget)+' conversations to update.')
+         print('Found total '+str(numtoupdated)+'/'+str(toget)+' conversations in this set that needs updating.')
          
          if tomerge is not None:
              if itercounter==1:
@@ -422,25 +401,40 @@ if rebuild[1]:
          else:
               getmore=False
               print('Found no conversations to update. Exiting while loop')     
-         if eof:
+         if eof:#may be redundant (useful only if instead of a hard stop, using a threshold)
               getmore=False
-              print ('Need to wait for scrolling api to be added by python API dev.')      
+              print ('Reached eof')      
          
          itercounter+=1
-     print('Completed retrieval of conversations that need to be updated.')
+         updatenumaccu+=numtoupdated
+         
+     print('Completed retrieval.')
+     print('Total of #'+str(updatenumaccu)+' conversations that needs to be updated.')
      
      totalconv=len(tomergedf)
-     #convert id
+     
+     #format columns into what is required     
      tomergedf.assignee=tomergedf.assignee.apply(lambda s: s.id)
      tomergedf['adminname']=tomergedf.assignee.apply(lambda s: getadminname(s,admindf))
      tomergedf.user=tomergedf.user.apply(lambda s: s.id)
-     
+     tomergedf=tomergedf.rename(columns={ 'id' : 'convid'})
+     del tomergedf['changed_attributes']
+
+     for attr in userdatetimeattrlist:#may be redundant
+         try: 
+              tomergedf[attr]=pd.to_datetime(tomergedf[attr],unit='s')
+         except KeyError:
+              pass
+          
+     #Since userdf depends on scroll api, may be missing users from intercom          
+     #scan through list of conversations to augment mergedf with username and email.
      itercounter=1
      missinguserdf=0     
      df=[]
-     for index, row in tomergedf.iterrows():#handling missing users from intercom          
+     
+     for index, row in tomergedf.iterrows():
           try:        
-               if itercounter%(int(totalconv/5))==0:#display progress counter
+               if itercounter%(int(totalconv/10))==0:#display progress counter
                       print('Processed ' + str(itercounter)+'/'+str(totalconv) + ' conversations')                     
           except ZeroDivisionError: 
                pass  
@@ -461,18 +455,24 @@ if rebuild[1]:
                #append to userdf
                #print('Updated userdf')
                userdf=userdf.append(userdetails,ignore_index=True)               
-               missinguserdf+=1               
-          else:
-               userdetails=userdf[userdf['id']==userid].iloc[0]#.to_dict()#found in df, extract values out
+               missinguserdf+=1  
+               #userdetails=userdetails[['name','email']].iloc[0].tolist()
+          else:#to handle multiple userid in userdf!!!!!! shouldn't be the case!!
+               userdetails=userdf[userdf['id']==userid]#.iloc[0]#.to_dict()#found in df, extract values out
+               #userdetails=userdetails[['name','email']].tolist()
                #userdetails=userdetails[userdetails.keys()[0]]#format may be different. possible source of errors!!!!!!!!!!!!!!!! keys used because method returns a series
           
-          df.append(dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role')))                                                            
+          #df.append(dict(username=userdetails.get('name'),email=userdetails.get('email')))                                                            
+          df.append(userdetails[['name','email']].iloc[0].tolist())
           itercounter+=1
+          
           #df=pd.Series([dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role'))])
-     tomergedf=tomergedf.merge(pd.DataFrame(df),left_index=True, right_index=True)
+     tomergedf=tomergedf.merge(pd.DataFrame(df,columns=['username','email']),left_index=True, right_index=True)#probably wrong here df going crazy
+     #tomergedf.update()
      
      print('Extracted all conversations to be merged')              
-     print('Found #' + str(itercounter-1)+ ' conversations')
+     print('Found #' + str(itercounter-1) + ' conversations with missing user info')
+     print('Found #'+ str(missinguserdf) + ' users missing from userdf')
      print('Updated userdf')
                    
 else:
@@ -483,14 +483,15 @@ print('Time started: '+ str(datetime.datetime.now()))
                
  
 #%% create another dataframe with all conversation parts
-tt.tic()
+#tt.tic()
 attrnames=['author','created_at','body','id','notified_at','part_type','assigned_to','url','attachments','subject']
 
 conv=[]
 if rebuild[0]:
      print('Retrieving full content of conversations from Intercom')
      itercounter=1     
-     
+     #consider brute force appending dicts and modify outside of loop.
+     #bottleneck should still be querying from intercom
      for convid in tomergedf.convid:
           try:        
                if itercounter%(int(totalconv/10))==0:#display progress counter
@@ -528,7 +529,11 @@ if rebuild[0]:
           
           #useless attributes
           del conv_message['changed_attributes']
-
+          del conv_message['attachments']
+          del conv_message['body'] #<-- tracking?
+          del conv_message['subject']
+          del conv_message['url']
+                    
           #append to final list       
           conv.append(conv_message)          
 
@@ -545,9 +550,7 @@ if rebuild[0]:
                #Modify attributes
                conv_part['msgid']=conv_part['id']  
                del conv_part['id']
-               conv_part['created_at']=pd.to_datetime(conv_part['created_at'],unit='s')
-               #conv_part['created_at']=datetime.datetime.fromtimestamp(conv_part['created_at'])
-               #conv_part['notified_at']=datetime.datetime.fromtimestamp(conv_part['notified_at'])
+               conv_part['created_at']=pd.to_datetime(conv_part['created_at'],unit='s')               
                conv_part['author']=conv_part['author'].id
                if conv_part['assigned_to']:
                     conv_part['assigned_to']=conv_part['assigned_to'].id
@@ -566,6 +569,8 @@ if rebuild[0]:
                del conv_part['updated_at']
                del conv_part['external_id']
                del conv_part['changed_attributes']
+               del conv_part['body']
+               del conv_part['attachments']
                
                #append to final list  
                conv.append(conv_part)
@@ -583,6 +588,12 @@ if rebuild[0]:
      #convert possible datetime strings to datetime objects
      convdftomerge['notified_at']=pd.to_datetime(convdftomerge['notified_at'],unit='s')
      
+     #for attr in userdatetimeattrlist:
+     #   try: 
+     #        tempconvdf[attr]=pd.to_datetime(tempconvdf[attr],unit='s')
+     #   except KeyError:
+     #        pass
+     
      #seems like can merge here
      if convdf is not None:
          #update values in common rows
@@ -598,13 +609,44 @@ if rebuild[0]:
      
      #convdf['created_at']=pd.to_datetime(convdf['created_at'],unit='s')
      #split datetime into two parts so that can do comparison for time binning
-     splitdatetime(convdftomerge,datetimeattrlist)
+     splitdatetime(convdftomerge,datetimeattrlist)#<--- consider bringing down during augment
+     
 else:
      print ('Loaded Conversations from csv')   
 
-tt.toc()
+#tt.toc()
 
 #%% Calculate values to update adminconvdf
+# Get First response, first closed, last closed
+def getkeytimestats(s,refconvdf):
+    df=refconvdf[refconvdf.convid==s]
+    
+    #first response
+    firstrsp=df[df.idx_conv==1]
+    if firstrsp.empty:
+        firstrsp=None
+    else: 
+        firstrsp=firstrsp.created_at.iloc[0]
+    
+    #closed part types    
+    clsparts=df[df.part_type=='close']
+    
+    #first closed
+    firstcls=clsparts.head(1)
+    if firstcls.empty:
+        firstcls=None    
+    else: 
+        firstcls=firstcls.created_at.iloc[0]
+    
+    #clast closed
+    lastcls=clsparts.tail(1)
+    if lastcls.empty:
+        lastcls=None
+    else: 
+        lastcls=lastcls.created_at.iloc[0]
+    return pd.Series(dict(first_response=firstrsp,first_closed=firstcls,last_closed=lastcls))
+    
+'''
 #Find response time 
 def getfirstresponse(s,refconvdf):    
     firstrsp=refconvdf[(refconvdf.convid==s) & (refconvdf.idx_conv==1)]
@@ -612,35 +654,32 @@ def getfirstresponse(s,refconvdf):
         return firstrsp.created_at.values[0]
     else: 
         return None
-## to combine into one to avoid constant transversing
-def getnumclosed(s,refconvdf):#find number of closed within conversation
-    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')])
-    
-def getnumopened(s,refconvdf):#find number of closed within conversation
-    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='open')])    
-    
-def getnumcomments(s,refconvdf):
-    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='comment')])    
-    
-def getnumnotes(s,refconvdf):
-    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='note')])    
 
-def getnumassignments(s,refconvdf):
-    return len(refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='assignment')])        
-        
 #Find first closed time
 def getfirstclosed(s,refconvdf):
-    if getnumclosed(s,refconvdf)>0:
-         return refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')].head(1).created_at.values[0]
+    firstcls=refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')]
+    if not firstcls.empty:                  
+         return firstcls.head(1).created_at.values[0]
     else: 
          return None
 #last closed time          
 def getlastclosed(s,refconvdf):
-    if getnumclosed(s,refconvdf)>0:
-         return refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')].tail(1).created_at.values[0]
+    lastcls=refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')]
+    if not lastcls.empty:                      
+         return lastcls.tail(1).created_at.values[0]
     else: 
-         return None
-         
+         return None        
+'''        
+def getconvpartnum(s,refconvdf):    
+    #create empty series             
+    numcount=pd.Series(dict(close=0,comment=0,assignment=0,note=0,open=0))
+    #update using retrieved stats
+    df=refconvdf[(refconvdf.convid==s)]
+    numcount.update(df.part_type.value_counts())
+    #Force name change
+    numcount.rename({ 'close' : 'numclosed','comment':'nummessage','assignment':'numassign','note':'numnote','open':'numopened'},inplace=True)    
+    return numcount
+        
 def gettotaltags(s,refconvdf):         
      taglist=[]     
      for ptag in refconvdf[(refconvdf.convid==s)].tags.values:
@@ -661,7 +700,7 @@ def getschool(s,refconvdf):
      taglist=gettotaltags(s,refconvdf)     
      schoolname=list(set(schooltag.name.values).intersection(taglist))
      if not schoolname:
-          return None
+          return 'None'
      else:
           return schoolname
                     
@@ -687,7 +726,7 @@ def getissue(s,refconvdf):
      taglist=gettotaltags(s,refconvdf)
      issuename=list(set(issuetag.name.values).intersection(taglist))     
      if not issuename:
-          return None
+          return 'None'
      else:
           return issuename
 
@@ -737,58 +776,59 @@ def bintime(s,tunit,timebin,nanval):
             binval= timebin[-1]
     return binval        
 
-def recogtf(s,timebin):
+def recogtf(tf,timebin):#for printing timeframe in context
     timeframe=[7,30,180,365]
     tfstr=['Week','Month','6 Months','Year']    
-    binout=bintime(pd.Timedelta(s),'D',timebin,0)
+    binout=bintime(pd.Timedelta(tf),'D',timebin,0)
     binoutidx=[i for i,x in enumerate(timeframe) if x==binout]    
     return tfstr[binoutidx[0]]
 
 if rebuild[1]:
-     print('Building additional info for each conversation')
-     #response=[]
-     toaugment=tomergedf.copy()#keep original so that don't mess     
+     print('Building additional info for each conversation')     
+     toaugment=tomergedf.copy()#keep original so that don't mess 
           
-     generateddf=toaugment.convid.apply(lambda s: pd.Series({'first_response':getfirstresponse(s,convdf),
-                                                                       'first_closed': getfirstclosed(s,convdf),
-                                                                       'last_closed': getlastclosed(s,convdf),
-                                                                       'numclosed': getnumclosed(s,convdf),
-                                                                       'numopened': getnumopened(s,convdf),
-                                                                       'nummessage': getnumcomments(s,convdf),
-                                                                       'numnote': getnumnotes(s,convdf), 
-                                                                       'numassign': getnumassignments(s,convdf),
-                                                                       'numtags': len(gettotaltags(s,convdf)),                                                                  
-                                                                       'issue': getissue(s,convdf),#duplicate
-                                                                       'school': getschool(s,convdf),#duplicate
+     #getting conversation part stats
+     print('Getting Conversation part stats')
+     convpartstatsdf=toaugment.convid.apply(lambda s: getconvpartnum(s,convdf))
+     print('Conversation part stats df generated')
+     
+     #get tags
+     print('Getting conversation school(s) and issue(s)')
+     issuenschooldf=toaugment.convid.apply(lambda s: pd.Series({'numtags': len(gettotaltags(s,convdf)),
+                                                                'issue': getissue(s,convdf),#duplicate
+                                                                'school': getschool(s,convdf)#duplicate
                                                                             }))
-         
-         #getschooldf=adminconvdfcopy.convid.apply(lambda s: pd.Series({'school': getschool(s)}))    
-         
-         #subtracting. not sure whats the shift() for
-         #df['col'] - df['col'].shift()
+     print('School and issue df generated')
+     
+     #get time info
+     print('Generating key time stats')
+     generateddf=toaugment.convid.apply(lambda s: getkeytimestats(s,convdf))
+
+     print('first_response, first_closed and last_closed df generated')
      
      #some missing values need to change to be able to manipulate
      for item in datetimeattrlist+datetimeattrspltlist:               
               if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],errors='coerce')
      
-     #get response,firstclose,lastclose timedelta
+     #get response,firstclose,lastclose timedelta 
+     print('Getting timedeltas')
      tdeltadf=generateddf[['first_response', 'first_closed','last_closed']].sub(toaugment['created_at'], axis=0)
      tdeltadf.columns = ['s_to_first_response', 's_to_first_closed','s_to_last_closed']
      tudeltadf=toaugment[['updated_at']].sub(toaugment['created_at'], axis=0)
      tudeltadf.columns = ['s_to_last_update']
+     print('Timedelta for first_response, first_closed, last_closed, updated_at, generated')
      
-     toaugment=toaugment.merge(generateddf, left_index=True, right_index=True)
-     toaugment=toaugment.merge(tdeltadf, left_index=True, right_index=True)
-     toaugment=toaugment.merge(tudeltadf, left_index=True, right_index=True)
-     #adminconvdfcopy.merge(getschooldf, left_index=True, right_index=True)
+     #concat them together
+     toaugment=pd.concat([toaugment,convpartstatsdf,issuenschooldf,generateddf,tdeltadf,tudeltadf], axis=1)
+    
      print('Additional info for each conversation')     
      
-     #change open to 1 for easier understanding
+     #change open from bool to int for easier understanding
      toaugment['open']=toaugment.open.apply(lambda s: s*1)    
-     #change none to string so that can group
-     toaugment['issue']=toaugment.issue.apply(lambda s: changenonetostr(s))
-     #change none to string so that can group
-     toaugment['school']=toaugment.school.apply(lambda s: changenonetostr(s))
+     #change none to string so that can group(shifted into function)
+     #toaugment['issue']=toaugment.issue.apply(lambda s: changenonetostr(s))
+     #change none to string so that can group(shifted into function)
+     #toaugment['school']=toaugment.school.apply(lambda s: changenonetostr(s))
      #count issues
      toaugment['numissues']=toaugment.issue.apply(lambda s: countissue(s))    
      
@@ -799,8 +839,20 @@ if rebuild[1]:
      toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
                                            and not isinstance(x, pd.tslib.NaTType) else 'None')    
      toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+
+     #split datetime for created_at into two parts so that can do comparison for time binning
+     splitdatetime(toaugment,datetimeattrlist[0]) 
+     #add end of created day
+     toaugment['created_at_EOD']=toaugment.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
      
-     #merge the missing files     
+     #merge the missing files!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! columns of missing and temptopconvdf different!!!!!!!!!need to check!!!! appending is screwing things up!     
+     #missing is missing username(converted name from id)
+     #missing role
+     #extra numopened <-- last minute addition. csv file may not have
+     #missing email
+     #extra conversation message
+     #extra changed_attributes
+     
      if topconvdf is not None:
          #update values in common rows
          common=toaugment[toaugment.convid.isin(topconvdf.convid)]
@@ -814,23 +866,26 @@ if rebuild[1]:
      else:
          print('topconvdf empty, using toaugment instead')
          topconvdfcopy=toaugment
+     
+     topconvdfcopy.reset_index(inplace=True)    
      #rename so that it doesn't conflict when pulling conversation parts
      #topconvdf=topconvdf.rename(columns={ 'id' : 'convid'})
      #convert columns with datetime strings to datetime objects
-     topconvdfcopy['updated_at']=pd.to_datetime(topconvdfcopy['updated_at'],unit='s')
-     topconvdfcopy['created_at']=pd.to_datetime(topconvdfcopy['created_at'],unit='s')
-     #split datetime for created_at into two parts so that can do comparison for time binning
-     #splitdatetime(topconvdfcopy,datetimeattrlist[0]) 
+     
+     ##redundant!!! removed for now
+     #topconvdfcopy['updated_at']=pd.to_datetime(topconvdfcopy['updated_at'],unit='s')
+     #topconvdfcopy['created_at']=pd.to_datetime(topconvdfcopy['created_at'],unit='s')
+     
      #convert timedelta obj to timedelta
-     for item in timedeltaattrlist:                                  
-              if hasattr(topconvdfcopy, item): topconvdfcopy[item] = pd.to_timedelta(topconvdfcopy[item],errors='coerce')
+     #for item in timedeltaattrlist:                                  
+     #         if hasattr(topconvdfcopy, item): topconvdfcopy[item] = pd.to_timedelta(topconvdfcopy[item],errors='coerce')
      
 else:
      topconvdfcopy=topconvdf.copy()
      if not hasattr(topconvdfcopy,'created_at_Date'):
          splitdatetime(topconvdfcopy,datetimeattrlist[0])
  
-     #lists are read in as string. need to convert back so that can process. should move to common procedure.
+     #lists are read in as string. need to convert back so that can process. should move to common procedure when first loading in!!!!!!!!!!!!!!!!!!!!!!!!!!!
      str2listdf=topconvdfcopy.convid.apply(lambda s: pd.Series({'issue': getissue(s),'school': getschool(s)}))     #duplicate
      #cheating abit here. instead of processing string within adminconvdfcopy, getting entire data from convdf
      del topconvdfcopy['issue']
@@ -839,157 +894,94 @@ else:
      
      print('Metrics loaded from csv')                      
 
+#%% 
+def slicebytimeinterval(df,timeinterval,column='created_at_Date'):
+    if timeinterval[0]>timeinterval[1]:
+        print('Warning: timestart > timeend') 
+    sliceddf=df[(df[column] >= pd.to_datetime(timeinterval[0])) & (df[column] <= pd.to_datetime(timeinterval[1]))]
+    return sliceddf
 
-#%%group by tf
-print('Splitting by timeframe')
-timeframe=[7,30,180,365]
-timeframestart=[0,7,0,30,0,0]
-timeframeend=[7,14,30,60,180,365]
-#timeframe=[7]
-#timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
-timeframestartdt=[timenow.date()-datetime.timedelta(dt) for dt in timeframestart]
-timeframeenddt=[timenow.date()-datetime.timedelta(dt) for dt in timeframeend]
-             
-#change none to string so that can group
-topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
-#change none to string so that can group
-topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
 
-#add end of created day
-topconvdfcopy['created_at_EOD']=topconvdfcopy.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
-
-#topconvdfcopy.reset_index(drop=True,inplace=True)
-
-stats=[[[] for _ in range(9)] for _ in range(len(timeframestart))]     
-for i,tf in enumerate(timeframestart):
-    print('Generating stats for timeframe: ' + str(tf) + ' to ' + str(timeframeend[i])+ ' days ago' )             
+def expandtag(df,tagtype): #need to double check to see if truly duplicating properly--------------------------------------------------------
+    #use nested expandtag(expandtag(df,tagtype),tagtype) for both issue and school
+    if tagtype=='issue':
+        emptyrow=df[df['numissues']==0]#collect rows with issues equal to 0    
+        filledrow=df[df['numissues']>0]#collect rows with issues greater than 1
+    elif tagtype=='school':
+        emptyrow=df[df['school']=='None']#collect rows with schools with none    
+        filledrow=df[df['school']!='None']#collect rows with schools 
     
-################################created_at_Date got problems!!!!!!!!!!!!!!!!!    
-    
-    #temptimedf=adminconvdfcopy.loc[adminconvdfcopy['created_at_Date'] >= i].copy()
-    issuedf=topconvdfcopy.loc[(topconvdfcopy['created_at_Date'] <= pd.to_datetime(timeframestartdt[i])) & (topconvdfcopy['created_at_Date'] >= pd.to_datetime(timeframeenddt[i]))].copy()
-    #issuedf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] >= tfstart[i] and topconvdfcopy['created_at_Date'] >= tfend[i]].copy()
-    #handling multiple tags    
-    oissuedf=issuedf[issuedf['numissues']==0]#collect rows with issues equal to 0    
-    missuedf=issuedf[issuedf['numissues']>0]#collect rows with issues greater than 1
+    #Build new df 
+    newdf=[]
+    for index, row in filledrow.iterrows():                   
+        if type(row[tagtype])==unicode:
+            row[tagtype]=row[tagtype][1:-1].split(', ')
+        for multitag in row[tagtype]:            
+            temprow=row.copy()#duplicate row
+            temprow[tagtype]=multitag#replace multi issue of duplicated row with single issue
+            newdf.append(temprow)
+    filledrow=pd.DataFrame(newdf)   
         
-    #Build new df 
-    df=[]
-    for index, row in missuedf.iterrows():                   
-        if type(row.issue)==unicode:
-            row.issue=row.issue[1:-1].split(', ')
-        for issue in row.issue:            
-            temprow=row.copy()#duplicate row
-            temprow.issue=issue#replace multi issue of duplicated row with single issue
-            df.append(temprow)
-    missuedf=pd.DataFrame(df)            
-    
-    issuedf=oissuedf.append(missuedf)        #recombine
-    issuedf=issuedf.sort_index() #sort
-    
-    #Handling schools    
-    oschooldf=issuedf[issuedf['school']=='None']#collect rows with schools with none    
-    mschooldf=issuedf[issuedf['school']!='None']#collect rows with schools 
-    
-    #Build new df 
-    df=[]
-    for index, row in mschooldf.iterrows():                           
-        if type(row.school)==unicode:
-            row.school=row.school[1:-1].split(', ')
-        for school in row.school:            
-            temprow=row.copy()#duplicate row
-            temprow.school=school#replace multi sch of duplicated row with single sch
-            df.append(temprow)
-    mschooldf=pd.DataFrame(df)            
-    
-    issuedf=oschooldf.append(mschooldf)        #recombine
-    issuedf=issuedf.sort_index() #sort
-    
-    groupbyissue=issuedf.groupby('issue')   
-    #groupbyissuestats=groupbyissue.describe()
-    
-    #groupbyschool=issuedf.groupby('school')   
-    groupbyschool=issuedf[['issue','school']]
-    groupbyschool=groupbyschool.pivot_table(index='issue', columns='school', aggfunc=len, fill_value=0)
-    #sumoftags=pd.DataFrame(groupbyschool.transpose().sum())
-    #groupbyschool['Total']=sumoftags
-   
-    #groupbyschoolstats=groupbyschool.describe()
-    
-    #generate data for excel csv output
-    responsepivotdf=issuedf[['issue','s_response_bin']]
-    responsepivotdf=responsepivotdf.pivot_table(index='issue', columns='s_response_bin', aggfunc=len, fill_value=0)
-    sumoftags=pd.DataFrame(responsepivotdf.transpose().sum())
-    responsepivotdf['Total']=sumoftags
+    expandeddf=emptyrow.append(filledrow)        #recombine
+    expandeddf.sort_index(inplace=True) #sort
+    return expandeddf
 
-    resolvepivotdf=issuedf[['issue','s_resolve_bin']]    
-    resolvepivotdf=resolvepivotdf.pivot_table(index='issue', columns='s_resolve_bin', aggfunc=len, fill_value=0)
-    sumoftags=pd.DataFrame(resolvepivotdf.transpose().sum())
-    resolvepivotdf['Total']=sumoftags
-    
-    #number of conversations split by tag x-axis=day
-    #bug: days with no tags will not show up.
-    tagpivotdf=issuedf[['issue','created_at_Date']]        
-    tagpivotdf=tagpivotdf.pivot_table(index='issue', columns='created_at_Date', aggfunc=len, fill_value=0)
-    sumoftags=pd.DataFrame(tagpivotdf.transpose().sum())#appending this in will cause the column index to become a object, making appending via columns screwy.
-    
+ 
+#%% response and resolve pivottables for excel csv
+def generatetagpivtbl(inputdf,columnname, timeinterval):
+    #responsepivotdf=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
+    #resolvepivotdf=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])    
 
-    tagRpivotdf=issuedf[['s_to_first_response','created_at_Date']]    
-    tagRpivotdfdes=tagRpivotdf.groupby('created_at_Date').describe()
+    sliceddf=slicebytimeinterval(inputdf,timeinterval)
+    numconversations=len(sliceddf.convid.unique())
+    
+    workindf=sliceddf[['issue',columnname]]
+    pivtable=workindf.pivot_table(index='issue', columns=columnname, aggfunc=len, fill_value=0)
+    sumoftags=pd.DataFrame(pivtable.transpose().sum())
+    pivtable['Total']=sumoftags
+    
+    return pivtable, numconversations
+    
+#%% generate pivotables for issues and adminname
+def generatetagpivdf(inputdf, columnname, timeinterval):
+    #tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
+    #adminpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'adminname',[timeframestartdt[0],timeframeenddt[0]])
+    pivtable, numconversations=generatetagpivtbl(inputdf,columnname,timeinterval)
+    
+    #get response stats
+    tagRpivotdf=inputdf[['s_to_first_response',columnname]]    
+    tagRpivotdfdes=tagRpivotdf.groupby(columnname).describe()
     tagRpivotdfs=tagRpivotdfdes.unstack().loc[:,(slice(None),['mean','max'])]
-    tagRpivotdfs=tagRpivotdfs['s_to_first_response'].transpose()
+    responsestats=tagRpivotdfs['s_to_first_response'].transpose()
     
-    tagpivotdf=tagpivotdf.append(tagRpivotdfs)
-    tagpivotdf=tagpivotdf.assign(Total=sumoftags)
-    
-    #number of conversations split by admin x-axis=admin
-    adminpivotdf=issuedf[['issue','adminname']]    
-    adminpivotdf=adminpivotdf.pivot_table(index='issue', columns='adminname', aggfunc=len, fill_value=0)
-    sumoftags=pd.DataFrame(adminpivotdf.transpose().sum())    
+    return pivtable, responsestats, numconversations
 
-    adminRpivotdf=issuedf[['s_to_first_response','adminname']]    
-    adminRpivotdfdes=adminRpivotdf.groupby('adminname').describe()
-    adminRpivotdfs=adminRpivotdfdes.unstack().loc[:,(slice(None),['mean','max'])]
-    adminRpivotdfs=adminRpivotdfs['s_to_first_response'].transpose()
+#%% generate pivottables for opentags
+def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the augmented one
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
     
-    adminpivotdf=adminpivotdf.append(adminRpivotdfs)
-    adminpivotdf['Total']=sumoftags
+    sliceddf=slicebytimeinterval(rawinputdf,timeinterval)#overallconvdf
     
-    #time to respond and resolve (for all). Duplicate. to re-write because i've screwed with the original df at top.
-    overallconvdf=topconvdfcopy.loc[(topconvdfcopy['created_at_Date'] <= timeframestartdt[i]) and (topconvdfcopy['created_at_Date'] >= timeframeenddt[i])].copy()    
+    #get those currently open earlier than of tfstart
+    currentlyopen=rawinputdf[rawinputdf['open']==1]
+    openbeforetf=slicebytimeinterval(currentlyopen,[pd.to_datetime(0).date(),tfstart])
     
-    #add those still open but created before date.
-    openbeforetf=topconvdfcopy.loc[topconvdfcopy['created_at_Date'] < timeframeenddt[i]].copy()
-    openbeforetf=openbeforetf.loc[openbeforetf['open'] ==1]
-    
-    opentagconvdf=overallconvdf.append(openbeforetf)
-    
-    #collect rows with first_closed = none 
-    #openconvdf_none=overallconvdf[overallconvdf['first_closed'].isnull()].copy()
-    #openconvdf_none=issuedf[issuedf['first_closed'].isnull()].copy()
-    
-    #collect rows with first_closed >= end of day     
-    #problem seems to be just here. splitdatetime turns value into an object. the addition doesn't work
-    #endofday=issuedf['created_at_Date']+pd.Timedelta('1 days')+pd.Timedelta('-1us') 
-    
-    #endofday=pd.to_datetime(issuedf['created_at_Date'])+pd.Timedelta('1 days')+pd.Timedelta('-1us') #use pd.to_datetime to change
-    
-    #openconvdf_stillopen=issuedf[issuedf['first_closed'] >= endofday].copy()    
-    
+    #combine for processing
+    opentagconvdf=sliceddf.append(openbeforetf)
+         
     #if negative value means issue was closed before end of day. safe
     eodtdelta=opentagconvdf.first_closed.sub(opentagconvdf.created_at_EOD,axis=0)#<---------------usage of first closed misses conversations that have multiple close/openings.
     #forced into 0 bin.
         
-    eodbintf=range(1,1+ timeframeend[i]-timeframestart[i] )
-    eodbin=eodtdelta.apply(lambda s: bintime(s,'D',eodbintf,pd.NaT))
+    eodbintf=range(1,1+ tfdelta.days )
+    eodbin=eodtdelta.apply(lambda s: bintime(s,'D',eodbintf,None))#<--- currently not binning properly
     eodbin[eodbin.isnull()]=(datetime.datetime.now().date()-opentagconvdf.created_at_Date[eodbin.isnull()]).astype('timedelta64[D]')    
     openconvdf=opentagconvdf.assign(eodbin=eodbin.astype(int))
     
     opentagpivotdf=openconvdf[['adminname','created_at_Date','eodbin']].copy()    
-    #augment df with duplicates
-    #convert those with None to max based on current date
-    
-    datetime.datetime.now().date()
+    #augment df with duplicates, convert those with None to max based on current date        
     #keep all those that completed within the day 
     closedwithinaday=opentagpivotdf[opentagpivotdf.eodbin==1]    
     #duplicate those that more than 1 day
@@ -1005,242 +997,30 @@ for i,tf in enumerate(timeframestart):
     opentagpivotdf=closedwithinaday.append(tempdf)
     opentagpivotdf=opentagpivotdf.sort_index()
     
-    opentagpivotdfsubset=opentagpivotdf[opentagpivotdf['created_at_Date']>= timeframeenddt[i]] #hide all those outside timeframe
+    opentagpivotdfsubset=opentagpivotdf[opentagpivotdf['created_at_Date']>= tfstart] #hide all those outside timeframe
     opentagpivotdf=opentagpivotdfsubset[['adminname','created_at_Date']].pivot_table(index='adminname', columns='created_at_Date', aggfunc=len, fill_value=0)    
-    sumoftags=pd.DataFrame(opentagpivotdf.transpose().sum())        
-    
-
-    #opentagRpivotdf=openconvdf[['s_to_first_response','created_at_Date']].copy()    
-    #opentagRpivotdfdes=opentagRpivotdf.groupby('created_at_Date').describe()
-    #opentagRpivotdfs=opentagRpivotdfdes.unstack().loc[:,(slice(None),['mean','max'])]
-    #opentagRpivotdfs=opentagRpivotdfs['s_to_first_response'].transpose()
-
-    #opentagpivotdf=opentagpivotdf.append(opentagRpivotdfs)    
+    sumoftags=pd.DataFrame(opentagpivotdf.transpose().sum())            
     
     opentagRpivotdfdes2=opentagpivotdfsubset.groupby('created_at_Date').describe()
     opentagRpivotdfs2=opentagRpivotdfdes2.unstack().loc[:,(slice(None),['count'])]
     opentagRpivotdfs2=opentagRpivotdfs2['eodbin'].transpose()
     opentagpivotdf=opentagpivotdf.append(opentagRpivotdfs2)    
     opentagpivotdf['Total']=sumoftags
-        
-    #sort to list    
-    stats[i][0]=responsepivotdf
-    stats[i][1]=resolvepivotdf
-    stats[i][2]=groupbyissue
-    stats[i][3]=groupbyschool
-    stats[i][4]=tagpivotdf    
-    stats[i][5]=adminpivotdf
-    stats[i][6]=opentagpivotdf
-    stats[i][7]=overallconvdf
-    stats[i][8]=dict(start=timeframestartdt[i],end=timeframeenddt[i],numconversations=len(overallconvdf),tf=recogtf(timeframestartdt[i]-timeframeenddt[i],timeframeend[i]-timeframestart[i]+1))
     
-#for key, item in issuestats[1][0]:
-#    print issuestats[1][0].get_group(key), "\n\n"
-#df[df['BoolCol'] == True].index.tolist()
-#[[x,l.count(x)] for x in set(listofissues)]
-#past week
+    return opentagpivotdf
+    
 
-outputstats=True
-if outputstats:
-    response_csv_path=os.path.abspath(os.path.join(outputfolder,'response_csv.csv'))
-    with open(response_csv_path, 'w') as f:
-        stats[0][0].to_csv(f,sep='\t')
-    resolve_csv_path=os.path.abspath(os.path.join(outputfolder,'resolve_csv.csv'))        
-    with open(resolve_csv_path, 'w') as f:
-        stats[0][1].to_csv(f,sep='\t')        
-    dailytagcount_csv_path=os.path.abspath(os.path.join(outputfolder,'dailytagcount_csv.csv'))            
-    with open(dailytagcount_csv_path, 'w') as f: 
-        stats[0][4].to_csv(f,sep='\t')        
 
-#%% Tags by timeframe
-def tagsbytfplot(inputpivtable,ofilename):    
-    pivtable=inputpivtable[4].copy()#for the week        
-    plottf=inputpivtable[-1]['tf']    
-    start=inputpivtable[-1]['start']
-    end=inputpivtable[-1]['end']
-    n=inputpivtable[-1]['numconversations']    
-    day_piv=pivtable.ix[:-2,:-1]
-    aggstats_piv=pivtable.ix[-2:,:-1].copy()
-    aggstats_piv=aggstats_piv.transpose()
-    mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
-    max_piv=aggstats_piv['max'].astype('timedelta64[s]')
-    
-    data_piv=[]    
-    for idx,row in day_piv.iterrows():
-        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
-        data_piv.append(tempdata_piv)
-    
-    avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
-                             name='Average Response time',yaxis='y2')    
-    data_piv.append(avgresponse)
-    
-    longestresponse = Scatter(x=day_piv.columns, y=max_piv/3600.0,
-                                 name='Longest Response time', yaxis='y2')    
-    data_piv.append(longestresponse)    
-        
-    layout = Layout(title='Conversations (n = '+ str(n) +') for last '+ plottf + ' ( '+str(start)+' - '+str(end)+' )',
-                    yaxis=dict(title='Conversations'),
-                    xaxis=dict(title='Date'),
-                    barmode='relative',
-                    yaxis2=dict(title='Time (hours)',titlefont=dict(color='rgb(148, 103, 189)'),
-                                      tickfont=dict(color='rgb(148, 103, 189)'),
-                                      overlaying='y', side='right'
-                                  )
-                    )
-    fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
+#%% plot functions 
 
-    #%% Tags by timeframe
-def tagsbyschoolplot(inputpivtable,ofilename):    
-    pivtable=inputpivtable[3].copy()        
-    plottf=inputpivtable[-1]['tf']    
-    start=inputpivtable[-1]['start']
-    end=inputpivtable[-1]['end']
-    n=inputpivtable[-1]['numconversations']    
-    day_piv=pivtable    
-        
-    data_piv=[]    
-    for idx,row in day_piv.iterrows():
-        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
-        data_piv.append(tempdata_piv)        
-        
-    layout = Layout(title='Conversation Tags by School (n = '+ str(n) +') for last '+ plottf + ' ( '+str(start)+' - '+str(end)+' )',
-                    yaxis=dict(title='Tags'),
-                    xaxis=dict(title='School'),
-                    barmode='relative'                    
-                    )
-    fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
-    
-#%% Open conversations by day
-def openconvobytfplot(inputpivtable,ofilename):
-    pivtable=inputpivtable[6].copy()#for the week
-    plottf=inputpivtable[-1]['tf']
-    start=inputpivtable[-1]['start']    
-    end=inputpivtable[-1]['end']
-    day_piv=pivtable.ix[:-1,:-1]
-    convocount=pivtable.ix[-1,:-1]
-    
-    data_piv=[]    
-    for idx,row in day_piv.iterrows():
-        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
-        data_piv.append(tempdata_piv)
-           
-    layout = Layout(title='Conversations still open at the end of day for past '+ plottf + ' ( '+str(start)+' - '+str(end)+' )',
-                    yaxis=dict(title='Conversations'),                    
-                    barmode='relative',                    
-                    xaxis=dict(     rangeselector=dict(
-                                        buttons=list([ dict(count=7, label='1w', step='day',stepmode='backward'),
-                                                       dict(count=14, label='2w', step='day',stepmode='backward'),
-                                                       dict(count=1, label='1m', step='month', stepmode='backward'),
-                                                       dict(count=6, label='6m', step='month', stepmode='backward'),
-                                                       dict(step='all')
-                                                       ])
-                                                            ),
-                                        rangeslider=dict(),
-                                        type='date'
-                                      ),
-                    annotations=[   dict(x=xi,y=yi, text=str(yi),
-                                    xanchor='center', yanchor='bottom',
-                                    showarrow=False) for xi, yi in zip(day_piv.columns, convocount.values)]
-                    )
-    fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
-    
-#%%
-def allconvobyadminplot(inputpivtable,ofilename):
-    pivtable=inputpivtable[5].copy()#for the week
-    plottf=inputpivtable[-1]['tf']
-    start=inputpivtable[-1]['start']
-    end=inputpivtable[-1]['end']
-    n=inputpivtable[-1]['numconversations']    
-    day_piv=pivtable.ix[:-2,:-1]
-    aggstats_piv=pivtable.ix[-2:,:-1].copy()
-    aggstats_piv=aggstats_piv.transpose()
-    mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
-    max_piv=aggstats_piv['max'].astype('timedelta64[s]')
-    
-    data_piv=[]    
-    for idx,row in day_piv.iterrows():
-        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
-        data_piv.append(tempdata_piv)
-    
-    avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
-                             name='Average Response time',yaxis='y2')    
-    data_piv.append(avgresponse)
-    
-    longestresponse = Scatter(x=day_piv.columns, y=max_piv/3600.0,
-                                 name='Longest Response time', yaxis='y2')    
-    data_piv.append(longestresponse)
-        
-    layout = Layout(title='Conversations (n = '+ str(n) +') for last '+ plottf + ' ( '+str(start)+' - '+str(end)+' )',
-                    yaxis=dict(title='Conversations'),
-                    xaxis=dict(title='Admin name'),
-                    barmode='relative',
-                    yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
-                                      tickfont=dict(color='rgb(148, 103, 189)'),
-                                      overlaying='y', side='right'
-                                  )
-                    )
-    fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
-    
-#%%
-def overalltagplot(inputpivtable,ofilename):
-    pivtable=inputpivtable[4].copy()#for the month
-    plottf=inputpivtable[-1]['tf']
-    start=inputpivtable[-1]['start']
-    end=inputpivtable[-1]['end']
-    n=inputpivtable[-1]['numconversations']    
-    #day_piv=pivtable.ix[:-2,:-1]
-    overall_piv=pivtable['Total'][:-2]   
-    x=overall_piv.index.tolist()
-    y=overall_piv.tolist() 
-    datao_piv=[Bar(x=x, y=y)]
-    layout = Layout(title='Total conversations (n = '+ str(n) +') split by tags for the last '+ plottf + ' ( '+str(start)+' - '+str(end)+' )',
-                    yaxis=dict(title='Number'),
-                    xaxis=dict(title='Tags'),
-                    annotations=[   dict(x=xi,y=yi, text=str(yi),
-                                    xanchor='center', yanchor='bottom',
-                                    showarrow=False) for xi, yi in zip(x, y)]
-                    )
-    fig = dict(data=datao_piv, layout=layout )
-    plot(fig,filename=ofilename)
-#%%
-def overalltagplot2(inputpivtablelist,ofilename):
-    datalist=[]
-    nlist=[]
-
-    for idx,inputpivtable in enumerate(inputpivtablelist):
-        pivtable=inputpivtable[4].copy()#for the month
-        plottf=inputpivtable[-1]['tf']
-        start=inputpivtable[-1]['start']
-        end=inputpivtable[-1]['end']
-        n=inputpivtable[-1]['numconversations']    
-        #day_piv=pivtable.ix[:-2,:-1]
-        overall_piv=pivtable['Total'][:-2]   
-        x=overall_piv.index.tolist()
-        y=overall_piv.tolist()
-        datao_piv=Bar(x=x, y=y,name=plottf+' ( '+str(start)+' - '+str(end)+' )')
-        
-        datalist.append(datao_piv)
-        nlist.append(str(n))
-        
-    opstr='(' + ','.join(nlist) + ')'
-        
-    layout = Layout(title='Total conversations split by tags for past two '+ plottf + ', n = ' + opstr,
-                    yaxis=dict(title='Number'),
-                    xaxis=dict(title='Tags'),
-                    barmode='group'
-                    )
-    fig = dict(data=datalist, layout=layout )
-    plot(fig,filename=ofilename)    
 #%% overallresponse
-def overallresponsestatplot(inputdf,ofilename):
-    responsestats=inputdf[7].copy()#past month
-    plottf=inputdf[-1]['tf']
-    start=inputdf[-1]['start']
-    end=inputdf[-1]['end']
+def overallresponsestatplot(rawinputdf,timeinterval,ofilename):
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    
+    responsestats=slicebytimeinterval(rawinputdf,timeinterval).copy()#overallconvdf
     responsestats=responsestats.sort_values('created_at',ascending=True)
     #convert 'None' str into None #this is a fucking terrible bandaid. Please fix soon
     #responsestats['s_to_first_response']=responsestats.s_to_first_response.apply(lambda s: changenonetotimedeltazero(s))
@@ -1267,7 +1047,7 @@ def overallresponsestatplot(inputdf,ofilename):
         except AttributeError:
              usernamestr='Username: ' + str(row.username)
         emailstr='Email: ' + str(row.email)        
-        textstr='<br>'.join([nummessagestr,issuestr,schoolstr,usernamestr,adminnamestr,emailstr,numnotestr,numassignstr,numclosedstr])
+        textstr='<br>'.join([nummessagestr,issuestr,schoolstr,usernamestr,adminnamestr,emailstr,numnotestr,numassignstr,numclosedstr])#add in conversation id in case need to track back
         textlst.append(textstr)
             
     data1 = Scatter(    x=responsestats['created_at'], y=fr/3600.0,
@@ -1286,7 +1066,7 @@ def overallresponsestatplot(inputdf,ofilename):
                         name='Last update', mode = 'lines+markers'
                         )
 
-    layout = Layout(    title='Overall response for last ' + plottf + ' ( '+str(start)+' - '+str(end)+' )',
+    layout = Layout(    title='Overall response for last ' + plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
                         yaxis=dict(title='Hours',dtick=5.0),
                         #xaxis=dict(title='Day')
                         xaxis=dict(     rangeselector=dict(
@@ -1303,39 +1083,285 @@ def overallresponsestatplot(inputdf,ofilename):
                         )
     fig = dict(data=[data1,data2,data3,data4], layout=layout )            
     plot(fig,filename=ofilename)
-    
 
+#%% Open conversations by day
+def openconvobytfplot(rawinputdf,timeinterval,ofilename):
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    
+    pivtable=generateopentagpivdf(rawinputdf, timeinterval)
+        
+    day_piv=pivtable.ix[:-1,:-1]
+    convocount=pivtable.ix[-1,:-1]
+    
+    data_piv=[]    
+    for idx,row in day_piv.iterrows():
+        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
+        data_piv.append(tempdata_piv)
+           
+    layout = Layout(title='Conversations still open at the end of day for past '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+                    yaxis=dict(title='Conversations'),                    
+                    barmode='relative',                    
+                    xaxis=dict(     rangeselector=dict(
+                                        buttons=list([ dict(count=7, label='1w', step='day',stepmode='backward'),
+                                                       dict(count=14, label='2w', step='day',stepmode='backward'),
+                                                       dict(count=1, label='1m', step='month', stepmode='backward'),
+                                                       dict(count=6, label='6m', step='month', stepmode='backward'),
+                                                       dict(step='all')
+                                                       ])
+                                                            ),
+                                        rangeslider=dict(),
+                                        type='date'
+                                      ),
+                    annotations=[   dict(x=xi,y=yi, text=str(yi),
+                                    xanchor='center', yanchor='bottom',
+                                    showarrow=False) for xi, yi in zip(day_piv.columns, convocount.values)]
+                    )
+    fig = dict(data=data_piv, layout=layout )
+    plot(fig,filename=ofilename)
+
+#%% Tags by timeframe
+def tagsbytfplot(inputdf,timeinterval,ofilename):    #y-axis:time, x-axis tags
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+
+    pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
+
+    day_piv=pivtable.ix[:,:-1]
+    aggstats_piv=responsestats
+    aggstats_piv=aggstats_piv.transpose()
+    mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
+    max_piv=aggstats_piv['max'].astype('timedelta64[s]')
+    
+    data_piv=[]    
+    for idx,row in day_piv.iterrows():
+        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
+        data_piv.append(tempdata_piv)
+    
+    avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
+                             name='Average Response time',yaxis='y2')    
+    data_piv.append(avgresponse)
+    
+    longestresponse = Scatter(x=day_piv.columns, y=max_piv/3600.0,
+                                 name='Longest Response time', yaxis='y2')    
+    data_piv.append(longestresponse)    
+        
+    layout = Layout(title='Conversations (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+                    yaxis=dict(title='Conversations'),
+                    xaxis=dict(title='Date'),
+                    barmode='relative',
+                    yaxis2=dict(title='Time (hours)',titlefont=dict(color='rgb(148, 103, 189)'),
+                                      tickfont=dict(color='rgb(148, 103, 189)'),
+                                      overlaying='y', side='right'
+                                  )
+                    )
+    fig = dict(data=data_piv, layout=layout )
+    plot(fig,filename=ofilename)
+    
+#%% Plot number of tags for the time interval
+def overalltagplot(inputdf,timeinterval,ofilename):#x-axis tags, y-axis number of tags
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+
+    pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
+
+    #pivtable=inputpivtable[4].copy()#tagpivotdf
+
+    overall_piv=pivtable['Total']
+    x=overall_piv.index.tolist()
+    y=overall_piv.tolist() 
+    datao_piv=[Bar(x=x, y=y)]
+    layout = Layout(title='Total conversations (n = '+ str(numconversations) +') split by tags for the last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+                    yaxis=dict(title='Number'),
+                    xaxis=dict(title='Tags'),
+                    annotations=[   dict(x=xi,y=yi, text=str(yi),
+                                    xanchor='center', yanchor='bottom',
+                                    showarrow=False) for xi, yi in zip(x, y)]
+                    )
+    fig = dict(data=datao_piv, layout=layout )
+    plot(fig,filename=ofilename)
+    
+#%% PLot two overalltagplot for two timeintervals for comparison
+def overalltagplot2(inputdf,timeintervallist,ofilename):#dual timeframe comparison. x-axis tags, y-axis number of tags
+    datalist=[]
+    nlist=[]
+
+    for idx,timeinterval in enumerate(timeintervallist):
+        tfstart=timeinterval[0]
+        tfend=timeinterval[1]
+        tfdelta=tfend-tfstart
+        plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+
+        pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
+                
+        overall_piv=pivtable['Total']
+        x=overall_piv.index.tolist()
+        y=overall_piv.tolist()
+        datao_piv=Bar(x=x, y=y,name=plottf+' ( '+str(tfstart)+' - '+str(tfend)+' )')
+        
+        datalist.append(datao_piv)
+        nlist.append(str(numconversations))
+        
+    opstr='(' + ','.join(nlist) + ')'
+        
+    layout = Layout(title='Total conversations split by tags for past two '+ plottf + ', n = ' + opstr,
+                    yaxis=dict(title='Number'),
+                    xaxis=dict(title='Tags'),
+                    barmode='group'
+                    )
+    fig = dict(data=datalist, layout=layout )
+    plot(fig,filename=ofilename)    
+
+#%% Issue handed by admin for the time interval
+def allconvobyadminplot(inputdf,timeinterval,ofilename): #need to check numbers. looks wrong*********************
+    #allconvobyadminplot(topconvdfcopy,timeinterval,'test.html')
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    
+    pivtable, responsestats, numconversations=generatetagpivdf(inputdf,'adminname',timeinterval)
+    
+    #pivtable=inputpivtable[5].copy()#adminpivotdf
+               
+    day_piv=pivtable.ix[:,:-1]
+    aggstats_piv=responsestats
+    aggstats_piv=aggstats_piv.transpose()
+    mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
+    max_piv=aggstats_piv['max'].astype('timedelta64[s]')
+    
+    data_piv=[]    
+    for idx,row in day_piv.iterrows():
+        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
+        data_piv.append(tempdata_piv)
+    
+    avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
+                             name='Average Response time',yaxis='y2')    
+    data_piv.append(avgresponse)
+    
+    longestresponse = Scatter(x=day_piv.columns, y=max_piv/3600.0,
+                                 name='Longest Response time', yaxis='y2')    
+    data_piv.append(longestresponse)
+        
+    layout = Layout(title='Conversations (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+                    yaxis=dict(title='Conversations'),
+                    xaxis=dict(title='Admin name'),
+                    barmode='relative',
+                    yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
+                                      tickfont=dict(color='rgb(148, 103, 189)'),
+                                      overlaying='y', side='right'
+                                  )
+                    )
+    fig = dict(data=data_piv, layout=layout )
+    plot(fig,filename=ofilename)
+    
+#%% Tags by timeframe
+    #tagsbyschoolplot(expandtag(expandtag(topconvdfcopy,'issue'),'school'),timeinterval,'test.html')
+def tagsbyschoolplot(inputdf,timeinterval,ofilename):
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    
+    sliceddf=slicebytimeinterval(inputdf,timeinterval)    
+    
+    workindf=sliceddf[['issue','school']]#used in tagsbyschoolplot
+    pivtable=workindf.pivot_table(index='issue', columns='school', aggfunc=len, fill_value=0)
+    #pivtable=inputpivtable[3].copy()       #groupbyschool     
+    
+    plottf=recogtf(tfdelta,range(tfdelta.days+1))    
+    n=len(sliceddf.convid.unique())   
+    day_piv=pivtable    
+        
+    data_piv=[]    
+    for idx,row in day_piv.iterrows():
+        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
+        data_piv.append(tempdata_piv)        
+        
+    layout = Layout(title='Conversation Tags by School (n = '+ str(n) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+                    yaxis=dict(title='Tags'),
+                    xaxis=dict(title='School'),
+                    barmode='relative'                    
+                    )
+    fig = dict(data=data_piv, layout=layout )
+    plot(fig,filename=ofilename)
+        
 #%% Plotting
+#%%group by tf
+print('Generating plots')
+#timeframe=[7,30,180,365]
+timeframeend=[0,7,0,30,0,0]#[w1,w2,m1,m2,0.5y,1y]
+timeframestart=[7,14,30,60,180,365]
+#timeframe=[7]
+#timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
+timeframestartdt=[timenow.date()-datetime.timedelta(dt) for dt in timeframestart]
+timeframeenddt=[timenow.date()-datetime.timedelta(dt) for dt in timeframeend]
+             
+#change none to string so that can group
+topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
+#change none to string so that can group
+topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
+
+issueschoolexpandeddf=expandtag(expandtag(topconvdfcopy,'issue'),'school')
+
+outputstats=True
+if outputstats:
+    responsepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
+    resolvepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
+    tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
+    
+    response_csv_path=os.path.abspath(os.path.join(outputfolder,'response_csv.csv'))
+    with open(response_csv_path, 'w') as f:
+        responsepivotdf.to_csv(f,sep='\t')
+    
+    resolve_csv_path=os.path.abspath(os.path.join(outputfolder,'resolve_csv.csv'))        
+    with open(resolve_csv_path, 'w') as f:
+        resolvepivotdf.to_csv(f,sep='\t')        
+        
+    dailytagcount_csv_path=os.path.abspath(os.path.join(outputfolder,'dailytagcount_csv.csv'))            
+    with open(dailytagcount_csv_path, 'w') as f: 
+        tagpivotdf.to_csv(f,sep='\t')      
 
 plotallconvobyadmin=True
-if plotallconvobyadmin:    
-    allconvobyadminplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyAdmin.html')))    
+if plotallconvobyadmin:        
+    allconvobyadminplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'tagsbyAdmin.html')))
 
 plotoveralltags=True
 if plotoveralltags:
-    overalltagplot(stats[1],os.path.abspath(os.path.join(outputfolder,'Overalltagsformonth.html')))
-    overalltagplot(stats[0],os.path.abspath(os.path.join(outputfolder,'Overalltagsforweek.html')))
-    
+    overalltagplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'Overalltagsformonth.html')))
+    overalltagplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'Overalltagsforweek.html')))
+
+    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[2],timeframeenddt[2]],[timeframestartdt[3],timeframeenddt[3]]],os.path.abspath(os.path.join(outputfolder,'Overalltagsforpast2month.html')))
+    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]]],os.path.abspath(os.path.join(outputfolder,'Overalltagsforpast2week.html')))
+            
 plotopenconvobytf=True    
 if plotopenconvobytf:
-    openconvobytfplot(stats[0],os.path.abspath(os.path.join(outputfolder,'openbyday_1W.html')))   
-    openconvobytfplot(stats[3],os.path.abspath(os.path.join(outputfolder,'openbyday_1Y.html')))    
+    openconvobytfplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'openbyday_1W.html')))    
+    openconvobytfplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'openbyday_1M.html')))
     
 plottagsbyday=True
-if plottagsbyday:
-    tagsbytfplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyday.html')))
+if plottagsbyday:    
+    tagsbytfplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'tagsbyday.html')))
             
 plotoverallresponsestats=True
 if plotoverallresponsestats:
-    overallresponsestatplot(stats[0],os.path.abspath(os.path.join(outputfolder,'overallresponse_1W.html'))) 
-    overallresponsestatplot(stats[1],os.path.abspath(os.path.join(outputfolder,'overallresponse_1M.html')))     
+    overallresponsestatplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'overallresponse_1W.html')))
+    overallresponsestatplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'overallresponse_1M.html')))
+        
     #overallresponsestatplot(stats[2][7],'overallresponse_6M.html','6 Months')
     #overallresponsestatplot(stats[3][7],'overallresponse_1Y.html','Year') 
 
 plottagsbyschool=True
 if plottagsbyschool:
-    tagsbyschoolplot(stats[0],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1W.html')))
-    tagsbyschoolplot(stats[1],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1Y.html')))
+    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1W.html')))
+    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1M.html')))
+    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[5],timeframeenddt[5]],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1Y.html')))
+    
     
 '''
 ilifetimestats=dict()
@@ -1462,15 +1488,17 @@ groupedbyadmindatesummary=groupedbyadmindate.describe()
 ## special characters are screwing with the output writing
 if output:
      convdfcopy=convdf.copy()
-     if rebuild[0]:
-          del convdfcopy['body']
-          del convdfcopy['subject']
-          del convdfcopy['attachments']
+     #if rebuild[0]:
+     #     del convdfcopy['body']
+     #     del convdfcopy['subject']
+     #     del convdfcopy['attachments']
               
      convdfcopy.to_csv(convstatsf, sep='\t', encoding="utf-8")
      print('Written to '+convstatsf)
      
      #rearranging columns before output
+     #this is screwing up the output/input!!!!!!!!!!!
+     '''
      convcolumns=['adminname','convid','open','read','created_at','created_at_Date',
                        'created_at_Time','first_response','s_to_first_response','numclosed',
                        'first_closed','s_to_first_closed','last_closed','s_to_last_closed',
@@ -1478,11 +1506,11 @@ if output:
                        'numtags','nummessage','numassign','numclosed','numnote','user',
                        'username','email','role','assignee','s_response_bin',
                        's_resolve_bin']
-                       
+     '''                  
      topconvdfcopyoutput=topconvdfcopy.copy()                 
      if rebuild[1]: 
           del topconvdfcopy['conversation_message']
-     topconvdfcopyoutput=topconvdfcopy[convcolumns]
+     #topconvdfcopyoutput=topconvdfcopy[convcolumns]
      topconvdfcopyoutput.to_csv(topconvstatsf, sep='\t', encoding="utf-8")
      print('Written to '+ topconvstatsf)
      
