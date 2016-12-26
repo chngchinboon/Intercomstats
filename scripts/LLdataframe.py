@@ -107,7 +107,7 @@ filelist=[convstatsf,topconvstatsf,userf]
 #rebuildconvdf=False
 #rebuildtopconvdf=False
 #rebuilduser=False
-output=False
+output=True
 toplot=False
 
 #rebuild=[rebuildconvdf,rebuildtopconvdf,rebuilduser]
@@ -176,7 +176,7 @@ def loaddffiles(filelocation,loadmode=1):
 userdf, rebuild[2]=loaddffiles(userf,1)
 if userdf is not None:
     #force into types as if we loaded manually
-    del userdf['Unnamed: 0']
+    #del userdf['Unnamed: 0']
     userdf['anonymous']=userdf['anonymous'].astype(bool)
     userdf['unsubscribed_from_emails']=userdf['unsubscribed_from_emails'].astype(bool)        
     userdf['session_count']=userdf['session_count'].astype('int64') 
@@ -192,9 +192,21 @@ if userdf is not None:
 #load convdf
 convdf, rebuild[0]=loaddffiles(convstatsf,1)
     #['tags'] need to be split into a list
-
+    #assigned_to read in as float may throw an error when printing?
+    #msgid read in as int64
+    #notified_at read in as object
+    #part_type read in as object (unicode)
+    #subject read in as float64 because all NaN
+    #url read in as float64 because all NaN
+    
+    
+    
 #load topconvdf
-topconvdf, rebuild[1]=loaddffiles(topconvstatsf,1) 
+topconvdf, rebuild[1]=loaddffiles(topconvstatsf,1)
+if topconvdf is not None:
+    topconvdf['created_at_EOD']=pd.to_datetime(topconvdf['created_at_EOD'],errors='coerce')
+    
+    #school and tags read in as unicode
      
 #%% Get admin info #small enough that can quickly get
 from intercom import Admin
@@ -586,7 +598,8 @@ if rebuild[0]:
      print('Built convdftomerge')
      
      #convert possible datetime strings to datetime objects
-     convdftomerge['notified_at']=pd.to_datetime(convdftomerge['notified_at'],unit='s')
+     if not convdftomerge.empty:  #may not have anything to merge   
+         convdftomerge['notified_at']=pd.to_datetime(convdftomerge['notified_at'],unit='s')
      
      #for attr in userdatetimeattrlist:
      #   try: 
@@ -595,17 +608,17 @@ if rebuild[0]:
      #        pass
      
      #seems like can merge here
-     if convdf is not None:
-         #update values in common rows
-         common=convdftomerge[convdftomerge.convid.isin(convdf.convid) & convdftomerge.idx_conv.isin(convdf.idx_conv)]
-         convdf.update(common)
-         #append missing rows
-         missing=convdftomerge[~(convdftomerge.convid.isin(convdf.convid) & convdftomerge.idx_conv.isin(convdf.idx_conv))]
-         convdf=convdf.append(missing)
-         print('Updated convdf with convdftomerge')
-     else:
-         print('Convdf empty, using convdftomerge instead')
-         convdf=convdftomerge
+         if convdf is not None:
+             #update values in common rows
+             common=convdftomerge[convdftomerge.convid.isin(convdf.convid) & convdftomerge.idx_conv.isin(convdf.idx_conv)]
+             convdf.update(common)
+             #append missing rows
+             missing=convdftomerge[~(convdftomerge.convid.isin(convdf.convid) & convdftomerge.idx_conv.isin(convdf.idx_conv))]
+             convdf=convdf.append(missing)
+             print('Updated convdf with convdftomerge')
+         else:
+             print('Convdf empty, using convdftomerge instead')
+             convdf=convdftomerge
      
      #convdf['created_at']=pd.to_datetime(convdf['created_at'],unit='s')
      #split datetime into two parts so that can do comparison for time binning
@@ -784,90 +797,94 @@ def recogtf(tf,timebin):#for printing timeframe in context
     return tfstr[binoutidx[0]]
 
 if rebuild[1]:
-     print('Building additional info for each conversation')     
-     toaugment=tomergedf.copy()#keep original so that don't mess 
-          
-     #getting conversation part stats
-     print('Getting Conversation part stats')
-     convpartstatsdf=toaugment.convid.apply(lambda s: getconvpartnum(s,convdf))
-     print('Conversation part stats df generated')
-     
-     #get tags
-     print('Getting conversation school(s) and issue(s)')
-     issuenschooldf=toaugment.convid.apply(lambda s: pd.Series({'numtags': len(gettotaltags(s,convdf)),
-                                                                'issue': getissue(s,convdf),#duplicate
-                                                                'school': getschool(s,convdf)#duplicate
-                                                                            }))
-     print('School and issue df generated')
-     
-     #get time info
-     print('Generating key time stats')
-     generateddf=toaugment.convid.apply(lambda s: getkeytimestats(s,convdf))
-
-     print('first_response, first_closed and last_closed df generated')
-     
-     #some missing values need to change to be able to manipulate
-     for item in datetimeattrlist+datetimeattrspltlist:               
-              if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],errors='coerce')
-     
-     #get response,firstclose,lastclose timedelta 
-     print('Getting timedeltas')
-     tdeltadf=generateddf[['first_response', 'first_closed','last_closed']].sub(toaugment['created_at'], axis=0)
-     tdeltadf.columns = ['s_to_first_response', 's_to_first_closed','s_to_last_closed']
-     tudeltadf=toaugment[['updated_at']].sub(toaugment['created_at'], axis=0)
-     tudeltadf.columns = ['s_to_last_update']
-     print('Timedelta for first_response, first_closed, last_closed, updated_at, generated')
-     
-     #concat them together
-     toaugment=pd.concat([toaugment,convpartstatsdf,issuenschooldf,generateddf,tdeltadf,tudeltadf], axis=1)
+     if not tomergedf.empty:
+         print('Building additional info for each conversation')     
+         toaugment=tomergedf.copy()#keep original so that don't mess 
+              
+         #getting conversation part stats
+         print('Getting Conversation part stats')
+         convpartstatsdf=toaugment.convid.apply(lambda s: getconvpartnum(s,convdf))
+         print('Conversation part stats df generated')
+         
+         #get tags
+         print('Getting conversation school(s) and issue(s)')
+         issuenschooldf=toaugment.convid.apply(lambda s: pd.Series({'numtags': len(gettotaltags(s,convdf)),
+                                                                    'issue': getissue(s,convdf),#duplicate
+                                                                    'school': getschool(s,convdf)#duplicate
+                                                                                }))
+         print('School and issue df generated')
+         
+         #get time info
+         print('Generating key time stats')
+         generateddf=toaugment.convid.apply(lambda s: getkeytimestats(s,convdf))
     
-     print('Additional info for each conversation')     
-     
-     #change open from bool to int for easier understanding
-     toaugment['open']=toaugment.open.apply(lambda s: s*1)    
-     #change none to string so that can group(shifted into function)
-     #toaugment['issue']=toaugment.issue.apply(lambda s: changenonetostr(s))
-     #change none to string so that can group(shifted into function)
-     #toaugment['school']=toaugment.school.apply(lambda s: changenonetostr(s))
-     #count issues
-     toaugment['numissues']=toaugment.issue.apply(lambda s: countissue(s))    
-     
-     #bintime for pivot tables
-     toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
-     #can't print if type is replaced with str None
-     #Have to fill nattype with none first #this screws with plotly.
-     toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
-                                           and not isinstance(x, pd.tslib.NaTType) else 'None')    
-     toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
-
-     #split datetime for created_at into two parts so that can do comparison for time binning
-     splitdatetime(toaugment,datetimeattrlist[0]) 
-     #add end of created day
-     toaugment['created_at_EOD']=toaugment.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
-     
-     #merge the missing files!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! columns of missing and temptopconvdf different!!!!!!!!!need to check!!!! appending is screwing things up!     
-     #missing is missing username(converted name from id)
-     #missing role
-     #extra numopened <-- last minute addition. csv file may not have
-     #missing email
-     #extra conversation message
-     #extra changed_attributes
-     
-     if topconvdf is not None:
-         #update values in common rows
-         common=toaugment[toaugment.convid.isin(topconvdf.convid)]
-         temptopconvdf=topconvdf.copy()
-         temptopconvdf.update(common)
-         #append missing rows
-         missing=toaugment[~toaugment.convid.isin(topconvdf.convid)]
-         topconvdfcopy=temptopconvdf.append(missing)
-         print('Updated topconvdfcopy with toaugment')
-                  
+         print('first_response, first_closed and last_closed df generated')
+         
+         #some missing values need to change to be able to manipulate
+         for item in datetimeattrlist+datetimeattrspltlist:               
+                  if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],errors='coerce')
+         
+         #get response,firstclose,lastclose timedelta 
+         print('Getting timedeltas')
+         tdeltadf=generateddf[['first_response', 'first_closed','last_closed']].sub(toaugment['created_at'], axis=0)
+         tdeltadf.columns = ['s_to_first_response', 's_to_first_closed','s_to_last_closed']
+         tudeltadf=toaugment[['updated_at']].sub(toaugment['created_at'], axis=0)
+         tudeltadf.columns = ['s_to_last_update']
+         print('Timedelta for first_response, first_closed, last_closed, updated_at, generated')
+         
+         #concat them together
+         toaugment=pd.concat([toaugment,convpartstatsdf,issuenschooldf,generateddf,tdeltadf,tudeltadf], axis=1)
+        
+         print('Additional info for each conversation')     
+         
+         #change open from bool to int for easier understanding
+         toaugment['open']=toaugment.open.apply(lambda s: s*1)    
+         #change none to string so that can group(shifted into function)
+         #toaugment['issue']=toaugment.issue.apply(lambda s: changenonetostr(s))
+         #change none to string so that can group(shifted into function)
+         #toaugment['school']=toaugment.school.apply(lambda s: changenonetostr(s))
+         #count issues
+         toaugment['numissues']=toaugment.issue.apply(lambda s: countissue(s))    
+         
+         #bintime for pivot tables
+         toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+         #can't print if type is replaced with str None
+         #Have to fill nattype with none first #this screws with plotly.
+         toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
+                                               and not isinstance(x, pd.tslib.NaTType) else 'None')    
+         toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+    
+         #split datetime for created_at into two parts so that can do comparison for time binning
+         splitdatetime(toaugment,datetimeattrlist[0]) 
+         #add end of created day
+         toaugment['created_at_EOD']=toaugment.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
+         
+         #merge the missing files!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! columns of missing and temptopconvdf different!!!!!!!!!need to check!!!! appending is screwing things up!     
+         #missing is missing username(converted name from id)
+         #missing role
+         #extra numopened <-- last minute addition. csv file may not have
+         #missing email
+         #extra conversation message
+         #extra changed_attributes
+         
+         if topconvdf is not None:
+             #update values in common rows
+             common=toaugment[toaugment.convid.isin(topconvdf.convid)]
+             temptopconvdf=topconvdf.copy()
+             temptopconvdf.update(common)
+             #append missing rows
+             missing=toaugment[~toaugment.convid.isin(topconvdf.convid)]
+             topconvdfcopy=temptopconvdf.append(missing)
+             print('Updated topconvdfcopy with toaugment')
+                      
+         else:
+             print('topconvdf empty, using toaugment instead')
+             topconvdfcopy=toaugment
+         
+         topconvdfcopy.reset_index(inplace=True)
      else:
-         print('topconvdf empty, using toaugment instead')
-         topconvdfcopy=toaugment
-     
-     topconvdfcopy.reset_index(inplace=True)    
+         topconvdfcopy=topconvdf.copy()
+         print('tomergedf empty. Skipping augmentation')
      #rename so that it doesn't conflict when pulling conversation parts
      #topconvdf=topconvdf.rename(columns={ 'id' : 'convid'})
      #convert columns with datetime strings to datetime objects
