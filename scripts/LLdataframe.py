@@ -15,6 +15,8 @@ Created on Wed Nov 16 16:19:36 2016
 #Since algo uses first_closed to check, currently open conversations will be lose to the bin it was first_closed
 #huh
 
+
+
 #known flaws 28/12/2016
 #tags only at top level
 #multiple schools(m) with multi issue(n) will result in m*n conversations in augmenteddf
@@ -903,7 +905,7 @@ if rebuild[1]:
      
 else:
      topconvdfcopy=topconvdf.copy()
-     if not hasattr(topconvdfcopy,'created_at_Date'):
+     if not hasattr(topconvdfcopy,'created_at'):
          splitdatetime(topconvdfcopy,datetimeattrlist[0])
  
      #lists are read in as string. need to convert back so that can process. should move to common procedure when first loading in!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -919,7 +921,7 @@ else:
 def slicebytimeinterval(df,timeinterval,column='created_at_Date'):
     if timeinterval[0]>timeinterval[1]:
         print('Warning: timestart > timeend') 
-    sliceddf=df[(df[column] >= pd.to_datetime(timeinterval[0])) & (df[column] <= pd.to_datetime(timeinterval[1]))]
+    sliceddf=df[(df[column] > pd.to_datetime(timeinterval[0])) & (df[column] <= pd.to_datetime(timeinterval[1]))]
     return sliceddf
 
 
@@ -1306,7 +1308,9 @@ def tagsbyschoolplot(inputdf,timeinterval,ofilename):
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
     
-    sliceddf=slicebytimeinterval(inputdf,timeinterval)    
+    sliceddf=slicebytimeinterval(inputdf,timeinterval)
+    #remove untagged schools
+    sliceddf=sliceddf[sliceddf['school']!='None']
     
     workindf=sliceddf[['issue','school']]#used in tagsbyschoolplot
     pivtable=workindf.pivot_table(index='issue', columns='school', aggfunc=len, fill_value=0)
@@ -1378,8 +1382,8 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
 #%%group by tf
 print('Generating plots')
 #timeframe=[7,30,180,365]
-timeframeend=[0,7,0,30,0,0]#[w1,w2,m1,m2,0.5y,1y]
-timeframestart=[7,14,30,60,180,365]
+timeframeend=[0,8,0,31,0,0]#[w1,w2,m1,m2,0.5y,1y]
+timeframestart=[7,15,30,61,180,365]
 #timeframe=[7]
 #timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
 timeframestartdt=[timenow.date()-datetime.timedelta(dt) for dt in timeframestart]
