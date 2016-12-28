@@ -43,7 +43,7 @@ Created on Wed Nov 16 16:19:36 2016
 #check for match every iteration since find_all is based on last_update. 
 #once a threshold of numerous no change matches, abort? hard to decide the threshold.
 #perhaps average conversations a week + pid control based on previous week's number
-#build each as a separate function?
+#build each as a separate function? Done
 ######################################
 
 ##### Class for conversation details #####
@@ -62,6 +62,9 @@ Created on Wed Nov 16 16:19:36 2016
 #Currently specifying input pivot table from list, outputname, timeinterval(str), number of conversation
 #may want to pull in entire row of list instead.
 ########################################################################################################
+
+##### Sort by conversations by admin for missing tags, give conversation details in annotation in order for people to trace #####################
+
 
 @author: Boon
 """
@@ -1027,7 +1030,24 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     
     return opentagpivotdf
     
-
+#%%
+def getnonetags(inputdf, timeinterval, tagtype):
+    #tfstart=timeinterval[0]
+    #tfend=timeinterval[1]
+    #tfdelta=tfend-tfstart
+    
+    sliceddf=slicebytimeinterval(inputdf,timeinterval)
+    notag=sliceddf[sliceddf[tagtype]=='None']
+    notag['bodytext']=notag.conversation_message.apply(lambda s: s.body)
+    numconversations=len(notag)
+    
+    workindf=notag[['adminname','created_at_Date']]
+    pivtable=workindf.pivot_table(index='created_at_Date', columns='adminname', aggfunc=len, fill_value=0)
+    #sumoftags=pd.DataFrame(pivtable.transpose().sum())
+    #pivtable['Total']=sumoftags
+        
+    return pivtable, sliceddf, numconversations    
+    
 
 #%% plot functions 
 
@@ -1308,6 +1328,51 @@ def tagsbyschoolplot(inputdf,timeinterval,ofilename):
                     )
     fig = dict(data=data_piv, layout=layout )
     plot(fig,filename=ofilename)
+#%% nontag plot
+def nonetagplot(inputdf, timeinterval,columnname,ofilename):
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    
+    pivtable, sliceddf, numconversations = getnonetags(inputdf, timeinterval, columnname)
+    
+    day_piv=pivtable
+    
+    
+    
+    textlst=[]
+    for idx,row in sliceddf.iterrows():
+        adminnamestr='Adminname: ' +str(row.adminname)
+
+        bodystr='Text: ' + str(row.conversation_message.body.encode('utf-8'))
+        try: 
+             usernamestr='Username: ' + str(row.username.encode('utf-8'))
+        except AttributeError:
+             usernamestr='Username: ' + str(row.username)
+        emailstr='Email: ' + str(row.email)
+        
+        textstr='<br>'.join([usernamestr,adminnamestr,emailstr,bodystr])#add in conversation id in case need to track back
+        textlst.append(textstr)
+    
+    data_piv=[]    
+    for idx,row in day_piv.iterrows():
+        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx,text=textlst, textposition='top right')
+        data_piv.append(tempdata_piv)
+
+    
+    layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+                    yaxis=dict(title='Conversations'),
+                    xaxis=dict(title='Admin name'),
+                    barmode='relative',
+                    yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
+                                      tickfont=dict(color='rgb(148, 103, 189)'),
+                                      overlaying='y', side='right'
+                                  )
+                    )
+    fig = dict(data=data_piv, layout=layout )
+    plot(fig,filename=ofilename)
+    
         
 #%% Plotting
 #%%group by tf
