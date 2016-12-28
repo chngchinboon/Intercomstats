@@ -15,6 +15,9 @@ Created on Wed Nov 16 16:19:36 2016
 #Since algo uses first_closed to check, currently open conversations will be lose to the bin it was first_closed
 #huh
 
+#known flaws 28/12/2016
+#tags only at top level
+#multiple schools(m) with multi issue(n) will result in m*n conversations in augmenteddf
 ########################################################################################################
 #To Do list
 ########################################################################################################
@@ -76,6 +79,7 @@ import tictocgen as tt
 from intercom import Intercom
 
 import os.path
+
 outputfolder=os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'output'))
 #outputfolder=u'E:\\Boon\\intercomstats\\output'
 
@@ -104,9 +108,6 @@ userf=os.path.abspath(os.path.join(outputfolder,'user.csv'))
 filelist=[convstatsf,topconvstatsf,userf]
 #dflist=['convdf','topconvdf','userdf']
 
-#rebuildconvdf=False
-#rebuildtopconvdf=False
-#rebuilduser=False
 output=True
 toplot=False
 
@@ -1326,58 +1327,69 @@ topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
 
 issueschoolexpandeddf=expandtag(expandtag(topconvdfcopy,'issue'),'school')
 
+#save folders
+foldername=timenow.strftime("%Y%m%d-%H%M%S")
+pathbackup=os.path.abspath(os.path.join(outputfolder,foldername))     
+
+try: 
+    os.makedirs(pathbackup)
+except OSError:
+    if not os.path.isdir(pathbackup):
+        raise
+
+
 outputstats=True
 if outputstats:
     responsepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
     resolvepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
     tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
     
-    response_csv_path=os.path.abspath(os.path.join(outputfolder,'response_csv.csv'))
+    response_csv_path=os.path.abspath(os.path.join(pathbackup,'response.csv'))
     with open(response_csv_path, 'w') as f:
         responsepivotdf.to_csv(f,sep='\t')
     
-    resolve_csv_path=os.path.abspath(os.path.join(outputfolder,'resolve_csv.csv'))        
+    resolve_csv_path=os.path.abspath(os.path.join(pathbackup,'resolve.csv'))        
     with open(resolve_csv_path, 'w') as f:
         resolvepivotdf.to_csv(f,sep='\t')        
         
-    dailytagcount_csv_path=os.path.abspath(os.path.join(outputfolder,'dailytagcount_csv.csv'))            
+    dailytagcount_csv_path=os.path.abspath(os.path.join(pathbackup,'dailytagcount.csv'))            
     with open(dailytagcount_csv_path, 'w') as f: 
         tagpivotdf.to_csv(f,sep='\t')      
 
 plotallconvobyadmin=True
 if plotallconvobyadmin:        
-    allconvobyadminplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'tagsbyAdmin.html')))
+    allconvobyadminplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyAdmin.html')))
 
 plotoveralltags=True
 if plotoveralltags:
-    overalltagplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'Overalltagsformonth.html')))
-    overalltagplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'Overalltagsforweek.html')))
+    overalltagplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'Overalltagsformonth.html')))
+    overalltagplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforweek.html')))
 
-    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[2],timeframeenddt[2]],[timeframestartdt[3],timeframeenddt[3]]],os.path.abspath(os.path.join(outputfolder,'Overalltagsforpast2month.html')))
-    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]]],os.path.abspath(os.path.join(outputfolder,'Overalltagsforpast2week.html')))
+    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[2],timeframeenddt[2]],[timeframestartdt[3],timeframeenddt[3]]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforpast2month.html')))
+    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforpast2week.html')))
             
 plotopenconvobytf=True    
 if plotopenconvobytf:
-    openconvobytfplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'openbyday_1W.html')))    
-    openconvobytfplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'openbyday_1M.html')))
+    openconvobytfplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'openbyday_1W.html')))    
+    openconvobytfplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'openbyday_1M.html')))
     
 plottagsbyday=True
 if plottagsbyday:    
-    tagsbytfplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'tagsbyday.html')))
+    tagsbytfplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyday.html')))
             
 plotoverallresponsestats=True
 if plotoverallresponsestats:
-    overallresponsestatplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'overallresponse_1W.html')))
-    overallresponsestatplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'overallresponse_1M.html')))
+    overallresponsestatplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'overallresponse_1W.html')))
+    overallresponsestatplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'overallresponse_1M.html')))
         
     #overallresponsestatplot(stats[2][7],'overallresponse_6M.html','6 Months')
     #overallresponsestatplot(stats[3][7],'overallresponse_1Y.html','Year') 
 
 plottagsbyschool=True
 if plottagsbyschool:
-    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1W.html')))
-    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1M.html')))
-    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[5],timeframeenddt[5]],os.path.abspath(os.path.join(outputfolder,'tagsbyschool_1Y.html')))
+    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1W.html')))
+    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1M.html')))
+    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[5],timeframeenddt[5]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1Y.html')))
     
     
 '''
@@ -1503,41 +1515,45 @@ groupedbyadmindatesummary=groupedbyadmindate.describe()
 '''
 #%% output to csv
 ## special characters are screwing with the output writing
-if output:
-     convdfcopy=convdf.copy()
-     #if rebuild[0]:
-     #     del convdfcopy['body']
-     #     del convdfcopy['subject']
-     #     del convdfcopy['attachments']
+if output:        
+    convdfcopy=convdf.copy()
+    #if rebuild[0]:
+    #     del convdfcopy['body']
+    #     del convdfcopy['subject']
+    #     del convdfcopy['attachments']
               
-     convdfcopy.to_csv(convstatsf, sep='\t', encoding="utf-8")
-     print('Written to '+convstatsf)
+    convdfcopy.to_csv(convstatsf, sep='\t', encoding="utf-8")
+    convdfcopy.to_csv(os.path.abspath(os.path.join(outputfolder,foldername,'convstats.csv')), sep='\t', encoding="utf-8") 
+    print('Written to '+convstatsf)
      
-     #rearranging columns before output
-     #this is screwing up the output/input!!!!!!!!!!!
-     '''
-     convcolumns=['adminname','convid','open','read','created_at','created_at_Date',
-                       'created_at_Time','first_response','s_to_first_response','numclosed',
-                       'first_closed','s_to_first_closed','last_closed','s_to_last_closed',
-                       'updated_at','s_to_last_update','issue','numissues','school',
-                       'numtags','nummessage','numassign','numclosed','numnote','user',
-                       'username','email','role','assignee','s_response_bin',
-                       's_resolve_bin']
-     '''                  
-     topconvdfcopyoutput=topconvdfcopy.copy()                 
-     if rebuild[1]: 
-          del topconvdfcopy['conversation_message']
-     #topconvdfcopyoutput=topconvdfcopy[convcolumns]
-     topconvdfcopyoutput.to_csv(topconvstatsf, sep='\t', encoding="utf-8")
-     print('Written to '+ topconvstatsf)
+    #rearranging columns before output
+    #this is screwing up the output/input!!!!!!!!!!!
+    '''
+    convcolumns=['adminname','convid','open','read','created_at','created_at_Date',
+                      'created_at_Time','first_response','s_to_first_response','numclosed',
+                      'first_closed','s_to_first_closed','last_closed','s_to_last_closed',
+                      'updated_at','s_to_last_update','issue','numissues','school',
+                      'numtags','nummessage','numassign','numclosed','numnote','user',
+                      'username','email','role','assignee','s_response_bin',
+                      's_resolve_bin']
+    '''                  
+    topconvdfcopyoutput=topconvdfcopy.copy()                 
+    if rebuild[1]: 
+         del topconvdfcopy['conversation_message']
+    #topconvdfcopyoutput=topconvdfcopy[convcolumns]
+    topconvdfcopyoutput.to_csv(topconvstatsf, sep='\t', encoding="utf-8")
+    topconvdfcopyoutput.to_csv(os.path.abspath(os.path.join(outputfolder,foldername,'topconvstats.csv')), sep='\t', encoding="utf-8")
+    print('Written to '+ topconvstatsf)
      
-     if rebuild[2]:
-         #need to drop duplicates. ##########potential error source
-         userdf.drop_duplicates('id').to_csv(userf, sep='\t', encoding="utf-8")
-     print('Written to '+ userf)
-          
-    
-     '''
-     groupedbyadminstats.to_csv(groupbyadmintatsf,sep='\t', encoding="utf-8")
-     groupedbyadmindatesummary.to_csv('summary.csv',sep='\t', encoding="utf-8")
-     '''
+    if rebuild[2]:
+        #need to drop duplicates. ##########potential error source
+        userdf.drop_duplicates('id').to_csv(userf, sep='\t', encoding="utf-8")
+        userdf.to_csv(userf, sep='\t', encoding="utf-8")         
+        userdf.to_csv(os.path.abspath(os.path.join(outputfolder,foldername,'user.csv')), sep='\t', encoding="utf-8") 
+    print('Written to '+ userf)
+         
+
+    '''
+    groupedbyadminstats.to_csv(groupbyadmintatsf,sep='\t', encoding="utf-8")
+    groupedbyadmindatesummary.to_csv('summary.csv',sep='\t', encoding="utf-8")
+    '''
