@@ -992,7 +992,7 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
-    
+    #have to remove those created on the last day of time interval
     sliceddf=slicebytimeinterval(rawinputdf,timeinterval)#overallconvdf
     
     #get those currently open earlier than of tfstart
@@ -1000,7 +1000,7 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     openbeforetf=slicebytimeinterval(currentlyopen,[pd.to_datetime(0).date(),tfstart])
     
     #combine for processing
-    opentagconvdf=sliceddf.append(openbeforetf)
+    opentagconvdf=sliceddf.append(openbeforetf)        
          
     #if negative value means issue was closed before end of day. safe
     eodtdelta=opentagconvdf.first_closed.sub(opentagconvdf.created_at_EOD,axis=0)#<---------------usage of first closed misses conversations that have multiple close/openings.
@@ -1028,7 +1028,7 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     opentagpivotdf=closedwithinaday.append(tempdf)
     opentagpivotdf=opentagpivotdf.sort_index()
     
-    opentagpivotdfsubset=opentagpivotdf[opentagpivotdf['created_at_Date']>= tfstart] #hide all those outside timeframe
+    opentagpivotdfsubset=opentagpivotdf[(opentagpivotdf['created_at_Date']>= tfstart) & (opentagpivotdf['created_at_Date']< tfend)] #hide all those outside timeframe
     opentagpivotdf=opentagpivotdfsubset[['adminname','created_at_Date']].pivot_table(index='adminname', columns='created_at_Date', aggfunc=len, fill_value=0)    
     sumoftags=pd.DataFrame(opentagpivotdf.transpose().sum())            
     
