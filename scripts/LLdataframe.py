@@ -91,8 +91,15 @@ outputfolder=os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir)))
 from configs import pid,key
+
+#from intercom.client import Client
+#pat=pid
+#intercom = Client(personal_access_token=pat)
+
+
 Intercom.app_id = pid
 Intercom.app_api_key = key
+
 
 import datetime
 import time
@@ -383,7 +390,7 @@ def getfewconv(df, convobj, num):
     
     tempconvdf=pd.DataFrame(tempdictlist)
     #collect only those later than the df
-    tempconvdf=tempconvdf[pd.to_datetime(tempconvdf.updated_at) > latestupdate]    
+    tempconvdf=tempconvdf[pd.to_datetime(tempconvdf.updated_at,unit='s') > latestupdate]    
     numtoupdate=len(tempconvdf)     
     
     if numtoupdate==0:
@@ -828,7 +835,7 @@ if rebuild[1]:
          
          #some missing values need to change to be able to manipulate
          for item in datetimeattrlist+datetimeattrspltlist:               
-                  if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],errors='coerce')
+                  if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],unit='s',errors='coerce')
          
          #get response,firstclose,lastclose timedelta 
          print('Getting timedeltas')
