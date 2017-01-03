@@ -835,7 +835,8 @@ if rebuild[1]:
          
          #some missing values need to change to be able to manipulate
          for item in datetimeattrlist+datetimeattrspltlist:               
-                  if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],unit='s',errors='coerce')
+                  #if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item],unit='s',errors='coerce') #weird bug here. cannot coerce, will force everything to nat
+                  if hasattr(generateddf, item): generateddf[item] = pd.to_datetime(generateddf[item])
          
          #get response,firstclose,lastclose timedelta 
          print('Getting timedeltas')
@@ -863,8 +864,8 @@ if rebuild[1]:
          toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
          #can't print if type is replaced with str None
          #Have to fill nattype with none first #this screws with plotly.
-         toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
-                                               and not isinstance(x, pd.tslib.NaTType) else 'None')    
+         #toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
+         #                                      and not isinstance(x, pd.tslib.NaTType) else 'None')    
          toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
     
          #split datetime for created_at into two parts so that can do comparison for time binning
