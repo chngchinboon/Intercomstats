@@ -164,7 +164,7 @@ def loaddffiles(filelocation,loadmode=1):
         loadmode=2
      
     if loadmode==0 or loadmode==1:
-        outputdf=pd.read_csv(filelocation, sep='\t', encoding='utf-8',index_col=0)
+        outputdf=pd.read_csv(filelocation, sep='\t', encoding='utf-8',index_col=False)
         #if hasattr(outputdf, 'Unnamed: 0'): del outputdf['Unnamed: 0']
         if hasattr(outputdf, 'convid'): outputdf['convid']=outputdf['convid'].astype('unicode')#loading auto changes this to int
         if hasattr(outputdf, 'assignee'): outputdf['assignee']=outputdf['assignee'].astype('unicode')#loading auto changes this to int
@@ -452,7 +452,7 @@ if rebuild[1]:
               pass
           
      #Since userdf depends on scroll api, may be missing users from intercom          
-     #scan through list of conversations to augment mergedf with username and email.
+     #scan through list of conversations to augment tomergedf with username and email.
      itercounter=1
      missinguserdf=0     
      df=[]
@@ -465,7 +465,10 @@ if rebuild[1]:
                pass  
                     
           userid=row.user
-          idxdf=userdf['id']==userid#count number of occurance
+          try:
+              idxdf=userdf['id']==userid#count number of occurance
+          except TypeError:#incase idxdf is empty
+              idxdf=[0]
           if sum(idxdf)>1:#duplicate user entry. need to purge
                print('Duplicate user entry found. Please check csv/intercom')
        
@@ -492,7 +495,8 @@ if rebuild[1]:
           itercounter+=1
           
           #df=pd.Series([dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role'))])
-     tomergedf=tomergedf.merge(pd.DataFrame(df,columns=['username','email']),left_index=True, right_index=True)#probably wrong here df going crazy
+     tomergedf=tomergedf.merge(pd.DataFrame(df,columns=['username','email']),left_index=True, right_index=True)#probably wrong here df going crazy     
+     
      #tomergedf.update()
      
      print('Extracted all conversations to be merged')              
@@ -883,9 +887,14 @@ if rebuild[1]:
          
          if topconvdf is not None:
              #update values in common rows
-             common=toaugment[toaugment.convid.isin(topconvdf.convid)]
-             temptopconvdf=topconvdf.copy()
-             temptopconvdf.update(common)
+             ##indexes of tomergedf is based on how intercom arranges the info from conversation_findall. 
+             #has no meaning and relation to the topconvdf index. 
+             #Have to use convid as the index instead.
+             common=toaugment[toaugment.convid.isin(topconvdf.convid)]                                           
+             temptopconvdf=topconvdf.set_index('convid').copy()
+             temptopconvdf.update(common.set_index('convid',inplace=True))
+             temptopconvdf.reset_index(drop=True,inplace=True)
+             
              #append missing rows
              missing=toaugment[~toaugment.convid.isin(topconvdf.convid)]
              topconvdfcopy=temptopconvdf.append(missing)
@@ -895,7 +904,7 @@ if rebuild[1]:
              print('topconvdf empty, using toaugment instead')
              topconvdfcopy=toaugment
          
-         topconvdfcopy.reset_index(inplace=True)
+         topconvdfcopy.reset_index(drop=True,inplace=True)
      else:
          topconvdfcopy=topconvdf.copy()
          print('tomergedf empty. Skipping augmentation')
@@ -1048,7 +1057,7 @@ def getnonetags(inputdf, timeinterval, tagtype):
     
     sliceddf=slicebytimeinterval(inputdf,timeinterval)
     notag=sliceddf[sliceddf[tagtype]=='None']
-    notag['bodytext']=notag.conversation_message.apply(lambda s: s.body)
+    #notag['bodytext']=notag.conversation_message.apply(lambda s: s.body) #<-- soemone conversation_message converted to unicode. lost object properties. probably due to dict conversation or loading from csv
     numconversations=len(notag)
     
     workindf=notag[['adminname','created_at_Date']]
@@ -1349,28 +1358,32 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
     
     pivtable, sliceddf, numconversations = getnonetags(inputdf, timeinterval, columnname)
     
-    day_piv=pivtable
+    #day_piv=pivtable
     
-    
+    sliceddf
     
     textlst=[]
     for idx,row in sliceddf.iterrows():
         adminnamestr='Adminname: ' +str(row.adminname)
 
-        bodystr='Text: ' + str(row.conversation_message.body.encode('utf-8'))
+        #bodystr='Text: ' + str(row.conversation_message.body.encode('utf-8'))
         try: 
              usernamestr='Username: ' + str(row.username.encode('utf-8'))
         except AttributeError:
              usernamestr='Username: ' + str(row.username)
         emailstr='Email: ' + str(row.email)
         
-        textstr='<br>'.join([usernamestr,adminnamestr,emailstr,bodystr])#add in conversation id in case need to track back
+        textstr='<br>'.join([usernamestr,adminnamestr,emailstr])#add in conversation id in case need to track back
         textlst.append(textstr)
     
-    data_piv=[]    
-    for idx,row in day_piv.iterrows():
-        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx,text=textlst, textposition='top right')
-        data_piv.append(tempdata_piv)
+    #data_piv=[]    
+    #for idx,row in day_piv.iterrows():
+    #    tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx,text=textlst, textposition='top right')
+    #    data_piv.append(tempdata_piv)
+    data_piv=Scatter(    x=responsestats['created_at'], y=fr/3600.0,
+                        name='First response', mode = 'lines+markers',
+                        text=textlst, textposition='top'
+                        )
 
     
     layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
