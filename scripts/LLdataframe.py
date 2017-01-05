@@ -1065,7 +1065,7 @@ def getnonetags(inputdf, timeinterval, tagtype):
     #sumoftags=pd.DataFrame(pivtable.transpose().sum())
     #pivtable['Total']=sumoftags
         
-    return pivtable, sliceddf, numconversations    
+    return pivtable, notag, numconversations    
     
 
 #%% plot functions 
@@ -1356,16 +1356,16 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
     tfdelta=tfend-tfstart
     plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
     
-    pivtable, sliceddf, numconversations = getnonetags(inputdf, timeinterval, columnname)
+    pivtable, notag, numconversations = getnonetags(inputdf, timeinterval, columnname)
     
     #day_piv=pivtable
-    
-    sliceddf
+    notag=notag.sort_values('created_at',ascending=True)    
+    #fr=notag['s_to_first_response'].astype('timedelta64[s]')
+    #notag=sliceddf[columnname]
     
     textlst=[]
-    for idx,row in sliceddf.iterrows():
+    for idx,row in notag.iterrows():
         adminnamestr='Adminname: ' +str(row.adminname)
-
         #bodystr='Text: ' + str(row.conversation_message.body.encode('utf-8'))
         try: 
              usernamestr='Username: ' + str(row.username.encode('utf-8'))
@@ -1380,24 +1380,29 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
     #for idx,row in day_piv.iterrows():
     #    tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx,text=textlst, textposition='top right')
     #    data_piv.append(tempdata_piv)
-    data_piv=Scatter(    x=responsestats['created_at'], y=fr/3600.0,
-                        name='First response', mode = 'lines+markers',
-                        text=textlst, textposition='top'
+    
+    data_piv=Scatter(   x=notag['created_at'], y=np.zeros(len(notag)), mode = 'markers',
+                        name='Missing tags', text=textlst, textposition='top'
                         )
 
-    
     layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
-                    yaxis=dict(title='Conversations'),
-                    xaxis=dict(title='Admin name'),
-                    barmode='relative',
-                    yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
-                                      tickfont=dict(color='rgb(148, 103, 189)'),
-                                      overlaying='y', side='right'
-                                  )
+                    yaxis=dict(title='Conversations status'),
+                    xaxis=dict(title='Date')                
                     )
-    fig = dict(data=data_piv, layout=layout )
+    fig = dict(data=[data_piv], layout=layout)
     plot(fig,filename=ofilename)
     
+    data_piv2=[]    
+    for idx,row in pivtable.iterrows():
+        tempdata_piv = Bar(x=pivtable.columns, y=row.values, name=idx)
+        data_piv2.append(tempdata_piv)
+        
+    layout2 = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+                    yaxis=dict(title='Conversation date'),
+                    xaxis=dict(title='Adminname'),barmode='relative'               
+                    )
+    fig = dict(data=data_piv2, layout=layout2)
+    plot(fig,filename=ofilename+'byadmin')
         
 #%% Plotting
 #%%group by tf
@@ -1481,6 +1486,11 @@ if plottagsbyschool:
     tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1M.html')))
     tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[5],timeframeenddt[5]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1Y.html')))
     
+
+plotnonetags=True
+if plotnonetags:
+    nonetagplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'issue',os.path.abspath(os.path.join(pathbackup,'missingissue_1W.html')))
+    nonetagplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'school',os.path.abspath(os.path.join(pathbackup,'missingschool_1W')))
     
 '''
 ilifetimestats=dict()
