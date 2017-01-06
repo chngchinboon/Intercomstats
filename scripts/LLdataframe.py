@@ -1357,39 +1357,36 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
     plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
     
     pivtable, notag, numconversations = getnonetags(inputdf, timeinterval, columnname)
-    
-    #day_piv=pivtable
-    notag=notag.sort_values('created_at',ascending=True)    
-    #fr=notag['s_to_first_response'].astype('timedelta64[s]')
-    #notag=sliceddf[columnname]
-    
-    textlst=[]
-    for idx,row in notag.iterrows():
-        adminnamestr='Adminname: ' +str(row.adminname)
-        #bodystr='Text: ' + str(row.conversation_message.body.encode('utf-8'))
-        try: 
-             usernamestr='Username: ' + str(row.username.encode('utf-8'))
-        except AttributeError:
-             usernamestr='Username: ' + str(row.username)
-        emailstr='Email: ' + str(row.email)
         
-        textstr='<br>'.join([usernamestr,adminnamestr,emailstr])#add in conversation id in case need to track back
-        textlst.append(textstr)
+    notag=notag.sort_values('created_at',ascending=True)        
+    data_piv=[]  
     
-    #data_piv=[]    
-    #for idx,row in day_piv.iterrows():
-    #    tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx,text=textlst, textposition='top right')
-    #    data_piv.append(tempdata_piv)
-    
-    data_piv=Scatter(   x=notag['created_at'], y=np.zeros(len(notag)), mode = 'markers',
-                        name='Missing tags', text=textlst, textposition='top'
-                        )
-
+    groupedbyadminname=notag.groupby('adminname')
+    for groupname, item in groupedbyadminname:
+        textlst=[]        
+        for idx,row in item.iterrows():
+             adminnamestr='Adminname: ' +str(groupname)
+             #bodystr='Text: ' + str(row.conversation_message.body.encode('utf-8'))
+             try: 
+                  usernamestr='Username: ' + str(row.username.encode('utf-8'))
+             except AttributeError:
+                  usernamestr='Username: ' + str(row.username)
+             emailstr='Email: ' + str(row.email)
+             convid='Convid: ' + str(row.convid)
+             
+             textstr='<br>'.join([usernamestr,adminnamestr,emailstr,convid])#add in conversation id in case need to trace back
+             textlst.append(textstr)
+             
+        tempdata_piv=Scatter(   x=item['created_at'], y=np.zeros(len(item)), mode = 'markers',
+                   name=str(groupname), text=textlst, textposition='top'
+                   )
+        data_piv.append(tempdata_piv)
+         
     layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
                     yaxis=dict(title='Conversations status'),
                     xaxis=dict(title='Date')                
                     )
-    fig = dict(data=[data_piv], layout=layout)
+    fig = dict(data=data_piv, layout=layout)
     plot(fig,filename=ofilename)
     
     data_piv2=[]    
