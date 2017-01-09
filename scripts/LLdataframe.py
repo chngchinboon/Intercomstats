@@ -165,7 +165,7 @@ def loaddffiles(filelocation,loadmode=1):
      
     if loadmode==0 or loadmode==1:
         outputdf=pd.read_csv(filelocation, sep='\t', encoding='utf-8',index_col=False)
-        #if hasattr(outputdf, 'Unnamed: 0'): del outputdf['Unnamed: 0']
+        if hasattr(outputdf, 'Unnamed: 0'): del outputdf['Unnamed: 0']
         if hasattr(outputdf, 'convid'): outputdf['convid']=outputdf['convid'].astype('unicode')#loading auto changes this to int
         if hasattr(outputdf, 'assignee'): outputdf['assignee']=outputdf['assignee'].astype('unicode')#loading auto changes this to int
         for item in datetimeattrlist+datetimeattrspltlist:               
@@ -201,6 +201,7 @@ if userdf is not None:
     userdf['signed_up_at']=pd.to_datetime(userdf['signed_up_at'],errors='coerce')
     userdf['updated_at']=pd.to_datetime(userdf['updated_at'],errors='coerce')
     #updated_at can be used to check if needs updating
+    print ('Loaded #'+str(len(userdf))+ ' users')
         
 #load convdf
 convdf, rebuild[0]=loaddffiles(convstatsf,1)
@@ -218,6 +219,7 @@ convdf, rebuild[0]=loaddffiles(convstatsf,1)
 topconvdf, rebuild[1]=loaddffiles(topconvstatsf,1)
 if topconvdf is not None:
     topconvdf['created_at_EOD']=pd.to_datetime(topconvdf['created_at_EOD'],errors='coerce')
+    print ('Loaded #'+str(len(topconvdf))+ ' conversations')
     
     #school and tags read in as unicode
      
@@ -893,7 +895,8 @@ if rebuild[1]:
              common=toaugment[toaugment.convid.isin(topconvdf.convid)]                                           
              temptopconvdf=topconvdf.set_index('convid').copy()
              temptopconvdf.update(common.set_index('convid',inplace=True))
-             temptopconvdf.reset_index(drop=True,inplace=True)
+             #temptopconvdf.reset_index(drop=True,inplace=True)
+             temptopconvdf.reset_index(inplace=True)
              
              #append missing rows
              missing=toaugment[~toaugment.convid.isin(topconvdf.convid)]
@@ -980,16 +983,16 @@ def generatetagpivtbl(inputdf,columnname, timeinterval):
     sumoftags=pd.DataFrame(pivtable.transpose().sum())
     pivtable['Total']=sumoftags
     
-    return pivtable, numconversations
+    return sliceddf, pivtable, numconversations
     
 #%% generate pivotables for issues and adminname
 def generatetagpivdf(inputdf, columnname, timeinterval):
     #tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
     #adminpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'adminname',[timeframestartdt[0],timeframeenddt[0]])
-    pivtable, numconversations=generatetagpivtbl(inputdf,columnname,timeinterval)
+    sliceddf, pivtable, numconversations=generatetagpivtbl(inputdf,columnname,timeinterval)
     
     #get response stats
-    tagRpivotdf=inputdf[['s_to_first_response',columnname]]    
+    tagRpivotdf=sliceddf[['s_to_first_response',columnname]]    
     tagRpivotdfdes=tagRpivotdf.groupby(columnname).describe()
     tagRpivotdfs=tagRpivotdfdes.unstack().loc[:,(slice(None),['mean','max'])]
     responsestats=tagRpivotdfs['s_to_first_response'].transpose()
@@ -1049,7 +1052,7 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     
     return opentagpivotdf
     
-#%%
+#%% finding the missing tags
 def getnonetags(inputdf, timeinterval, tagtype):
     #tfstart=timeinterval[0]
     #tfend=timeinterval[1]
@@ -1362,6 +1365,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
     data_piv=[]  
     
     groupedbyadminname=notag.groupby('adminname')
+    admincounter=0
     for groupname, item in groupedbyadminname:
         textlst=[]        
         for idx,row in item.iterrows():
@@ -1374,14 +1378,18 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
              emailstr='Email: ' + str(row.email)
              convid='Convid: ' + str(row.convid)
              
-             textstr='<br>'.join([usernamestr,adminnamestr,emailstr,convid])#add in conversation id in case need to trace back
+             textstr='<br>'.join([adminnamestr,usernamestr,emailstr,convid])#add in conversation id in case need to trace back
              textlst.append(textstr)
+        
+        yval=np.zeros(len(item))   
+        yval.fill(len(groupedbyadminname)-admincounter)
              
-        tempdata_piv=Scatter(   x=item['created_at'], y=np.zeros(len(item)), mode = 'markers',
+        tempdata_piv=Scatter(   x=item['created_at'], y=yval, mode = 'markers',
                    name=str(groupname), text=textlst, textposition='top'
                    )
         data_piv.append(tempdata_piv)
-         
+        admincounter+=1
+        
     layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
                     yaxis=dict(title='Conversations status'),
                     xaxis=dict(title='Date')                
@@ -1432,8 +1440,8 @@ except OSError:
 
 outputstats=True
 if outputstats:
-    responsepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
-    resolvepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
+    sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
+    sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
     tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
     
     response_csv_path=os.path.abspath(os.path.join(pathbackup,'response.csv'))
@@ -1644,6 +1652,7 @@ if output:
      
     if rebuild[2]:
         #need to drop duplicates. ##########potential error source
+        if hasattr(userdf, 'Unnamed: 0'): del userdf['Unnamed: 0']
         userdf.drop_duplicates('id').to_csv(userf, sep='\t', encoding="utf-8")
         userdf.to_csv(userf, sep='\t', encoding="utf-8")         
         userdf.to_csv(os.path.abspath(os.path.join(outputfolder,foldername,'user.csv')), sep='\t', encoding="utf-8") 
