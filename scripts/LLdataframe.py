@@ -1005,6 +1005,9 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
     #have to remove those created on the last day of time interval
+    
+    
+    '''
     sliceddf=slicebytimeinterval(rawinputdf,timeinterval)#overallconvdf
     
     #get those currently open earlier than of tfstart
@@ -1013,7 +1016,22 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     
     #combine for processing
     opentagconvdf=sliceddf.append(openbeforetf)        
-         
+    '''
+    #set all current open conversations to have last_closed to be time of running script.
+    #openconv=rawinputdf[rawinputdf['last_closed'].isnull()]
+    rawinputdf.loc[rawinputdf['last_closed'].isnull(), 'last_closed'] = timenow#+pd.timedelta(1,'D')
+        
+    #get all conversations closed before interval
+    closedbefore=slicebytimeinterval(rawinputdf,[pd.to_datetime(0).date(), timeinterval[0]],'last_closed')
+    #get all conversations open after interval
+    openafter=slicebytimeinterval(rawinputdf,[timeinterval[1],pd.to_datetime(timenow).date()],'created_at')
+    outerlapping = closedbefore.merge(openafter, how='outer',on=['convid'])
+    opentagconvdf=rawinputdf[~rawinputdf.convid.isin(outerlapping.convid)]
+                             
+                             
+                             
+    
+    '''     
     #if negative value means issue was closed before end of day. safe
     eodtdelta=opentagconvdf.first_closed.sub(opentagconvdf.created_at_EOD,axis=0)#<---------------usage of first closed misses conversations that have multiple close/openings.
     #forced into 0 bin.
@@ -1049,6 +1067,21 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     opentagRpivotdfs2=opentagRpivotdfs2['eodbin'].transpose()
     opentagpivotdf=opentagpivotdf.append(opentagRpivotdfs2)    
     opentagpivotdf['Total']=sumoftags
+    
+    
+    #get all conversations that last closed is within timeinterval    
+    closedin=slicebytimeinterval(rawinputdf,timeinterval,'last_closed')#conversations closed within interval, will miss those open conversations with nat as last closed.
+    
+    createdin=slicebytimeinterval(rawinputdf,timeinterval,'created_at')#conversations created within interval
+    overlappingstart=slicebytimeinterval(rawinputdf,[pd.to_datetime(0).date(), timeinterval[0]],'created_at')#conversations that created and closed overlapping the interval 
+    overlappingend=slicebytimeinterval(rawinputdf,[timeinterval[1], pd.to_datetime(timenow)],'last_closed')#conversations that created and closed overlapping the interval 
+    overlapping = pd.merge(overlappingstart, overlappingend, how='inner', on=['convid'])
+    
+    
+    sliceddf=sliceddf.merge(currentlyopen,left_index=True, right_index=True)
+    
+    
+    '''
     
     return opentagpivotdf
     
