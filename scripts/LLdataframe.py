@@ -165,7 +165,8 @@ def loaddffiles(filelocation,loadmode=1):
      
     if loadmode==0 or loadmode==1:
         outputdf=pd.read_csv(filelocation, sep='\t', encoding='utf-8',index_col=False)
-        if hasattr(outputdf, 'Unnamed: 0'): del outputdf['Unnamed: 0']
+        if hasattr(outputdf, u'Unnamed: 0'): del outputdf['Unnamed: 0']#might be hiding poorly merge attempts
+        if hasattr(outputdf, u'Unnamed: 0.1'): del outputdf['Unnamed: 0.1']#might be hiding poorly merge attempts
         if hasattr(outputdf, 'convid'): outputdf['convid']=outputdf['convid'].astype('unicode')#loading auto changes this to int
         if hasattr(outputdf, 'assignee'): outputdf['assignee']=outputdf['assignee'].astype('unicode')#loading auto changes this to int
         for item in datetimeattrlist+datetimeattrspltlist:               
@@ -678,30 +679,6 @@ def getkeytimestats(s,refconvdf):
         lastcls=lastcls.created_at.iloc[0]
     return pd.Series(dict(first_response=firstrsp,first_closed=firstcls,last_closed=lastcls))
     
-'''
-#Find response time 
-def getfirstresponse(s,refconvdf):    
-    firstrsp=refconvdf[(refconvdf.convid==s) & (refconvdf.idx_conv==1)]
-    if not firstrsp.empty:
-        return firstrsp.created_at.values[0]
-    else: 
-        return None
-
-#Find first closed time
-def getfirstclosed(s,refconvdf):
-    firstcls=refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')]
-    if not firstcls.empty:                  
-         return firstcls.head(1).created_at.values[0]
-    else: 
-         return None
-#last closed time          
-def getlastclosed(s,refconvdf):
-    lastcls=refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='close')]
-    if not lastcls.empty:                      
-         return lastcls.tail(1).created_at.values[0]
-    else: 
-         return None        
-'''        
 def getconvpartnum(s,refconvdf):    
     #create empty series             
     numcount=pd.Series(dict(close=0,comment=0,assignment=0,note=0,open=0))
@@ -1005,7 +982,7 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
     #have to remove those created on the last day of time interval
-    
+    df=rawinputdf.copy()
     
     '''
     sliceddf=slicebytimeinterval(rawinputdf,timeinterval)#overallconvdf
@@ -1019,17 +996,41 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     '''
     #set all current open conversations to have last_closed to be time of running script.
     #openconv=rawinputdf[rawinputdf['last_closed'].isnull()]
-    rawinputdf.loc[rawinputdf['last_closed'].isnull(), 'last_closed'] = timenow#+pd.timedelta(1,'D')
+    df.loc[df['last_closed'].isnull(), 'last_closed'] = timenow#+pd.timedelta(1,'D')
         
     #get all conversations closed before interval
-    closedbefore=slicebytimeinterval(rawinputdf,[pd.to_datetime(0).date(), timeinterval[0]],'last_closed')
+    closedbefore=slicebytimeinterval(df,[pd.to_datetime(0).date(), timeinterval[0]],'last_closed')
     #get all conversations open after interval
-    openafter=slicebytimeinterval(rawinputdf,[timeinterval[1],pd.to_datetime(timenow).date()],'created_at')
+    openafter=slicebytimeinterval(df,[timeinterval[1],pd.to_datetime(timenow).date()],'created_at')
     outerlapping = closedbefore.merge(openafter, how='outer',on=['convid'])
-    opentagconvdf=rawinputdf[~rawinputdf.convid.isin(outerlapping.convid)]
+    opentagconvdf=df[~df.convid.isin(outerlapping.convid)]
                              
-                             
-                             
+    
+    #generate EOD for each day within interval for checking.                            
+    EODlist=pd.date_range(start=pd.to_datetime(tfstart)+pd.Timedelta('1 days')+pd.Timedelta('-1us'), periods=tfdelta.days).tolist()
+    
+    #iterate through each conversation for each EOD to check if open
+    openEOD=[]
+    totalconv=[]
+    for EOD in EODlist:
+            convopenatEOD=opentagconvdf[(EOD>opentagconvdf.created_at) & (EOD<opentagconvdf.last_closed)]                                        
+            #get counts
+            groupedbyadminname=convopenatEOD[['adminname','convid']].groupby('adminname').aggregate(len)
+            groupedbyadminname.rename(columns={"convid": 'count'},inplace=True)
+            
+            numconv=groupedbyadminname.values.sum()
+            #groupedbyadminname
+            dicttoappend=groupedbyadminname['count'].to_dict()
+            #dicttoappend['Total']=numconv
+            openEOD.append(dicttoappend)
+            totalconv.append(numconv)
+            
+    openEODdf=pd.DataFrame(openEOD,index=pd.to_datetime(EODlist).date).transpose()
+    
+    openEODdf=openEODdf.fillna(value=0)
+    
+    totalconvdf=pd.DataFrame(totalconv,index=pd.to_datetime(EODlist).date,columns=['Total']).transpose()
+    opentagpivotdf=openEODdf.append(totalconvdf)
     
     '''     
     #if negative value means issue was closed before end of day. safe
@@ -1186,8 +1187,8 @@ def openconvobytfplot(rawinputdf,timeinterval,ofilename):
     
     pivtable=generateopentagpivdf(rawinputdf, timeinterval)
         
-    day_piv=pivtable.ix[:-1,:-1]
-    convocount=pivtable.ix[-1,:-1]
+    day_piv=pivtable.ix[:-1,:]
+    convocount=pivtable.ix[-1,:]
     
     data_piv=[]    
     for idx,row in day_piv.iterrows():
@@ -1452,6 +1453,10 @@ timeframestart=[7,15,30,61,180,365]
 #timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
 timeframestartdt=[timenow.date()-datetime.timedelta(dt) for dt in timeframestart]
 timeframeenddt=[timenow.date()-datetime.timedelta(dt) for dt in timeframeend]
+
+#for debugging
+#timeinterval=[timeframestartdt[0],timeframeenddt[0]]
+#ofilename='test'                
              
 #change none to string so that can group
 topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
@@ -1470,9 +1475,10 @@ except OSError:
     if not os.path.isdir(pathbackup):
         raise
 
-
+Alloutdisable=False
+        
 outputstats=True
-if outputstats:
+if outputstats & ~Alloutdisable:
     sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
     sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
     tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
@@ -1490,11 +1496,11 @@ if outputstats:
         tagpivotdf.to_csv(f,sep='\t')      
 
 plotallconvobyadmin=True
-if plotallconvobyadmin:        
+if plotallconvobyadmin & ~Alloutdisable:        
     allconvobyadminplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyAdmin.html')))
 
 plotoveralltags=True
-if plotoveralltags:
+if plotoveralltags & ~Alloutdisable:
     overalltagplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'Overalltagsformonth.html')))
     overalltagplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforweek.html')))
 
@@ -1502,16 +1508,16 @@ if plotoveralltags:
     overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforpast2week.html')))
             
 plotopenconvobytf=True    
-if plotopenconvobytf:
+if plotopenconvobytf & ~Alloutdisable:
     openconvobytfplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'openbyday_1W.html')))    
     openconvobytfplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'openbyday_1M.html')))
     
 plottagsbyday=True
-if plottagsbyday:    
+if plottagsbyday & ~Alloutdisable:    
     tagsbytfplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyday.html')))
             
 plotoverallresponsestats=True
-if plotoverallresponsestats:
+if plotoverallresponsestats & ~Alloutdisable:
     overallresponsestatplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'overallresponse_1W.html')))
     overallresponsestatplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'overallresponse_1M.html')))
         
@@ -1519,14 +1525,14 @@ if plotoverallresponsestats:
     #overallresponsestatplot(stats[3][7],'overallresponse_1Y.html','Year') 
 
 plottagsbyschool=True
-if plottagsbyschool:
+if plottagsbyschool & ~Alloutdisable:
     tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1W.html')))
     tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1M.html')))
     tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[5],timeframeenddt[5]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1Y.html')))
     
 
 plotnonetags=True
-if plotnonetags:
+if plotnonetags & ~Alloutdisable:
     nonetagplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'issue',os.path.abspath(os.path.join(pathbackup,'missingissue_1W.html')))
     nonetagplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'school',os.path.abspath(os.path.join(pathbackup,'missingschool_1W')))
     
