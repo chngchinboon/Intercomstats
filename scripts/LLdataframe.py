@@ -7,14 +7,6 @@ Created on Wed Nov 16 16:19:36 2016
 #Current version working for pure rebuild or pure reload. unsure of bugs if seperate sections
 #are loaded differently.
 
-#buglist 20/12/2016
-#open convo not reflected 
-#nic - 20 dec
-#trang - 15dec
-#bug for trang tracked to conversations that have been closed/opened multiple times. 
-#Since algo uses first_closed to check, currently open conversations will be lose to the bin it was first_closed
-#huh
-
 
 
 #known flaws 28/12/2016
@@ -30,21 +22,13 @@ Created on Wed Nov 16 16:19:36 2016
 #currently it is a damn mess.
 ######################################
 
-###### Intercom data retrieval method #####
-#Currently iterating through admin list to obtaining conversations from each admin.
-#May be missing out on conversations that have no admin assigned. 
-#Evident from number of rows of adminconvdf vs number for all in Intercom.
-#Probably should pull from Conversations.find_all() instead and build own list.
-#Currently don't know how to identify admin owner of conversation. only know who is last assigned
-########################################### 
-
 #next version
 ##### DataBase #######################
-#build offline database for each intercom model
-#at every start, check for difference, merge if possible.
-#check for match every iteration since find_all is based on last_update. 
-#once a threshold of numerous no change matches, abort? hard to decide the threshold.
-#perhaps average conversations a week + pid control based on previous week's number
+#build offline database for each intercom model. Done
+#at every start, check for difference, merge if possible. Done
+#check for match every iteration since find_all is based on last_update.  Done
+#once a threshold of numerous no change matches, abort? hard to decide the threshold. Done
+#perhaps average conversations a week + pid control based on previous week's number 
 #build each as a separate function? Done
 ######################################
 
@@ -59,14 +43,6 @@ Created on Wed Nov 16 16:19:36 2016
 #reading in via read_csv doesn't return the exact format as when output.
 #Currently adminconvdf is kind of fixed. convdf is not.
 ########################################################################################################
-
-##### Reduce input parameters for plotting ###### 
-#Currently specifying input pivot table from list, outputname, timeinterval(str), number of conversation
-#may want to pull in entire row of list instead.
-########################################################################################################
-
-##### Sort by conversations by admin for missing tags, give conversation details in annotation in order for people to trace #####################
-
 
 @author: Boon
 """
@@ -96,10 +72,11 @@ from configs import pid,key
 #pat=pid
 #intercom = Client(personal_access_token=pat)
 
-
 Intercom.app_id = pid
 Intercom.app_api_key = key
 
+#Intercom.app_id = pid
+#Intercom.app_api_key = ""
 
 import datetime
 import time
@@ -245,7 +222,7 @@ issuename=['Admin','Apps','Attendance','Bug','Bulletins','Check In/Out',
            'Other Issue Type','Portfolio','Promotion','Wrong Parent Particulars',
            'Weekly Digest','Change of Particulars','User Guide', 'Duplicate',
            'Wrong Recipient','Security Alert (Google)','General Enquiry','Spam',
-           'User Guide','Mailgun','Yahoo Mail Block', 'Yahoo Mail Throttle/Block']
+           'User Guide','Mailgun','Yahoo Mail Block', 'Yahoo Mail Throttle/Block', 'Server Delay']
 
 issuetag=tagdf[tagdf.name.isin(issuename)] 
                
@@ -257,32 +234,6 @@ print('Retrieved Issuetag and Schooltag Df from Intercom')
 #loading from csv may not give recent info. need to pull from intercom for latest
 from intercom import User
 userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
-'''
-if rebuild[2]:
-    print('Retrieving users from Intercom. This will take awhile......')
-    userdict=[]
-    itercounter=1
-    try:
-        for item in User.all():
-            try:        
-                if itercounter%(250)==0:#display progress counter
-                    print('Processed ' + str(itercounter) + ' users')                     
-            except ZeroDivisionError: 
-                pass
-                
-            userdict.append(item.__dict__.copy())
-            itercounter+=1
-    
-    except Exception, err:
-        print (err)
-        print ('Need to wait for scrolling api to be added by python API dev.')
-        
-    userdf=pd.DataFrame(userdict) 
-    
-    for attr in userdatetimeattrlist:
-        userdf[attr]=pd.to_datetime(userdf[attr],unit='s')
-    print('Retrieved as many users as allowed by python-intercom API')
-'''    
         
 def getfewusers(df, obj, num):#consider using updated_at to check if user needs to be updated!
     userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
@@ -1032,57 +983,7 @@ def generateopentagpivdf(rawinputdf, timeinterval): #use only sliced, not the au
     totalconvdf=pd.DataFrame(totalconv,index=pd.to_datetime(EODlist).date,columns=['Total']).transpose()
     opentagpivotdf=openEODdf.append(totalconvdf)
     
-    '''     
-    #if negative value means issue was closed before end of day. safe
-    eodtdelta=opentagconvdf.first_closed.sub(opentagconvdf.created_at_EOD,axis=0)#<---------------usage of first closed misses conversations that have multiple close/openings.
-    #forced into 0 bin.
-        
-    eodbintf=range(1,1+ tfdelta.days )
-    eodbin=eodtdelta.apply(lambda s: bintime(s,'D',eodbintf,None))#<--- currently not binning properly
-    eodbin[eodbin.isnull()]=(datetime.datetime.now().date()-opentagconvdf.created_at_Date[eodbin.isnull()]).astype('timedelta64[D]')    
-    openconvdf=opentagconvdf.assign(eodbin=eodbin.astype(int))
     
-    opentagpivotdf=openconvdf[['adminname','created_at_Date','eodbin']].copy()    
-    #augment df with duplicates, convert those with None to max based on current date        
-    #keep all those that completed within the day 
-    closedwithinaday=opentagpivotdf[opentagpivotdf.eodbin==1]    
-    #duplicate those that more than 1 day
-    closedmorethanaday=opentagpivotdf[opentagpivotdf.eodbin!=1]
-    df=[]
-    for index, row in closedmorethanaday.iterrows():                           
-        for eodval in xrange(row.eodbin):
-            temprow=row.copy()#duplicate row
-            temprow.created_at_Date=temprow.created_at_Date+pd.Timedelta(eodval+1,'D')
-            df.append(temprow)
-    tempdf=pd.DataFrame(df)            
-    
-    opentagpivotdf=closedwithinaday.append(tempdf)
-    opentagpivotdf=opentagpivotdf.sort_index()
-    
-    opentagpivotdfsubset=opentagpivotdf[(opentagpivotdf['created_at_Date']>= tfstart) & (opentagpivotdf['created_at_Date']< tfend)] #hide all those outside timeframe
-    opentagpivotdf=opentagpivotdfsubset[['adminname','created_at_Date']].pivot_table(index='adminname', columns='created_at_Date', aggfunc=len, fill_value=0)    
-    sumoftags=pd.DataFrame(opentagpivotdf.transpose().sum())            
-    
-    opentagRpivotdfdes2=opentagpivotdfsubset.groupby('created_at_Date').describe()
-    opentagRpivotdfs2=opentagRpivotdfdes2.unstack().loc[:,(slice(None),['count'])]
-    opentagRpivotdfs2=opentagRpivotdfs2['eodbin'].transpose()
-    opentagpivotdf=opentagpivotdf.append(opentagRpivotdfs2)    
-    opentagpivotdf['Total']=sumoftags
-    
-    
-    #get all conversations that last closed is within timeinterval    
-    closedin=slicebytimeinterval(rawinputdf,timeinterval,'last_closed')#conversations closed within interval, will miss those open conversations with nat as last closed.
-    
-    createdin=slicebytimeinterval(rawinputdf,timeinterval,'created_at')#conversations created within interval
-    overlappingstart=slicebytimeinterval(rawinputdf,[pd.to_datetime(0).date(), timeinterval[0]],'created_at')#conversations that created and closed overlapping the interval 
-    overlappingend=slicebytimeinterval(rawinputdf,[timeinterval[1], pd.to_datetime(timenow)],'last_closed')#conversations that created and closed overlapping the interval 
-    overlapping = pd.merge(overlappingstart, overlappingend, how='inner', on=['convid'])
-    
-    
-    sliceddf=sliceddf.merge(currentlyopen,left_index=True, right_index=True)
-    
-    
-    '''
     
     return opentagpivotdf
     
