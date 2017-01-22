@@ -4,8 +4,8 @@ Created on Wed Nov 16 16:19:36 2016
 ########################################################################################################
 #Current bugs
 ########################################################################################################
-#Current version working for pure rebuild or pure reload. unsure of bugs if seperate sections
-#are loaded differently.
+#Possible errors in overalresponse
+#Possible errors in merging/updating local database
 
 
 
@@ -37,13 +37,6 @@ Created on Wed Nov 16 16:19:36 2016
 #handle both models of conversation_message and conversation_parts
 ##########################################
 
-##### Harmonize/standardize output formats ###### 
-#Current load from intercom -> output and load from csv is differnt.
-#Problem is due to pandas' to_csv is screwing over alot of the formatting
-#reading in via read_csv doesn't return the exact format as when output.
-#Currently adminconvdf is kind of fixed. convdf is not.
-########################################################################################################
-
 @author: Boon
 """
 #%%
@@ -56,6 +49,7 @@ import numpy as np
 import pandas as pd
 from ast import literal_eval
 import tictocgen as tt
+import xlsxwriter
 
 from intercom import Intercom
 
@@ -75,8 +69,8 @@ from configs import pid,key
 Intercom.app_id = pid
 Intercom.app_api_key = key
 
-#Intercom.app_id = pid
-#Intercom.app_api_key = ""
+#Intercom.app_id = 
+#Intercom.app_api_key = ''
 
 import datetime
 import time
@@ -111,22 +105,6 @@ timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed',
 #import os.path
 
 #load the files if rebuild is off #coerce may cause potential bugs !!!!!!!!!!!!!!
-'''
-for i,nfile in enumerate(filelist):
-    if os.path.isfile(nfile):
-        if not rebuild[i]:            
-            exec("%s = pd.read_csv((\'%s\'), sep='\t', encoding='utf-8')" %(dflist[i],filelist[i]))
-            exec("if hasattr(%s, 'Unnamed: 0'): del %s['Unnamed: 0']" %(dflist[i],dflist[i]))
-            exec("if hasattr(%s, 'convid'): %s['convid']=%s['convid'].astype('unicode')" %(dflist[i],dflist[i],dflist[i]))
-            exec("if hasattr(%s, 'assignee'): %s['assignee']=%s['assignee'].astype('unicode')" %(dflist[i],dflist[i],dflist[i]))
-            for item in datetimeattrlist+datetimeattrspltlist:               
-                exec("if hasattr(%s, item): %s[item] = pd.to_datetime(%s[item],errors='coerce')"  %(dflist[i],dflist[i],dflist[i]))                    
-            for item in timedeltaattrlist:                                  
-                exec("if hasattr(%s, item): %s[item] = pd.to_timedelta(%s[item],errors='coerce')" %(dflist[i],dflist[i],dflist[i]))                         
-            #for item in listlist:#trying to curnnot sure how to do
-                #exec("if hasattr(%s, item): %s[item] = %s[item].apply(literal_eval)" %(dflist[i],dflist[i],dflist[i]))            
-            print('Loaded ' + dflist[i] + ' from ' + filelist[i])
-'''
             
 #load csv files loadmode 0 = just load, 1 (default) = load and update check , 2 = don't load & full rebuild
 def loaddffiles(filelocation,loadmode=1):     
@@ -206,6 +184,18 @@ from intercom import Admin
 admindf=pd.DataFrame([x.__dict__ for x in Admin.all()]) 
 print('Retrieved Admin Df from Intercom')
 
+#split admin by country
+sglist = []
+with open(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir,'sgadminlist.txt'))) as inputfile:
+    for line in inputfile:#load admin list from file. #future improvement required!
+        sglist.append(line.strip())
+
+admindf_SG=admindf[admindf.name.isin(sglist)]
+admindf_MY=admindf[~admindf.name.isin(sglist)]
+
+countrylist=['Sg','My']
+admindfbycountry=[admindf_SG,admindf_MY]
+
 #%%Count
 from intercom import Count
 AdminCount=pd.DataFrame(Count.conversation_counts_for_each_admin)
@@ -214,16 +204,13 @@ print('Retrieved AdminCount Df from Intercom')
 from intercom import Tag
 tagdf=pd.DataFrame([x.__dict__ for x in Tag.all()])
 
-#group tags by issue
-issuename=['Admin','Apps','Attendance','Bug','Bulletins','Check In/Out',
-           'Checklist','Contact Sales Support','Feedback','Fees',
-           'Forward to Malaysia Team','Forward to School','Integration Issue',
-           'Internal:SPAM','LFR','Login Help','Logs','Moments','Notifications',
-           'Other Issue Type','Portfolio','Promotion','Wrong Parent Particulars',
-           'Weekly Digest','Change of Particulars','User Guide', 'Duplicate',
-           'Wrong Recipient','Security Alert (Google)','General Enquiry','Spam',
-           'User Guide','Mailgun','Yahoo Mail Block', 'Yahoo Mail Throttle/Block', 'Server Delay']
+#load issue from file
+issuename = []
+with open(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir,'issuelist.txt'))) as inputfile:
+    for line in inputfile:
+        issuename.append(line.strip())
 
+#group tags by issue
 issuetag=tagdf[tagdf.name.isin(issuename)] 
                
 #group tags by school
@@ -795,12 +782,12 @@ if rebuild[1]:
          toaugment['numissues']=toaugment.issue.apply(lambda s: countissue(s))    
          
          #bintime for pivot tables
-         toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+         toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4,5],0))
          #can't print if type is replaced with str None
          #Have to fill nattype with none first #this screws with plotly.
          #toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
          #                                      and not isinstance(x, pd.tslib.NaTType) else 'None')    
-         toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4],0))
+         toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4,5,10,24],0))
     
          #split datetime for created_at into two parts so that can do comparison for time binning
          splitdatetime(toaugment,datetimeattrlist[0]) 
@@ -869,7 +856,7 @@ else:
 def slicebytimeinterval(df,timeinterval,column='created_at_Date'):
     if timeinterval[0]>timeinterval[1]:
         print('Warning: timestart > timeend') 
-    sliceddf=df[(df[column] > pd.to_datetime(timeinterval[0])) & (df[column] <= pd.to_datetime(timeinterval[1]))]
+    sliceddf=df[(df[column] >= pd.to_datetime(timeinterval[0])) & (df[column] < pd.to_datetime(timeinterval[1]))]
     return sliceddf
 
 
@@ -908,8 +895,10 @@ def generatetagpivtbl(inputdf,columnname, timeinterval):
     
     workindf=sliceddf[['issue',columnname]]
     pivtable=workindf.pivot_table(index='issue', columns=columnname, aggfunc=len, fill_value=0)
-    sumoftags=pd.DataFrame(pivtable.transpose().sum())
+    sumoftags=pd.DataFrame(pivtable.transpose().sum())    
     pivtable['Total']=sumoftags
+    sumoftagsbycolumn=pd.DataFrame(pivtable.sum(),columns=['Total'])
+    pivtable=pivtable.append(sumoftagsbycolumn.transpose())
     
     return sliceddf, pivtable, numconversations
     
@@ -1008,8 +997,8 @@ def getnonetags(inputdf, timeinterval, tagtype):
 
 #%% plot functions 
 
-#%% overallresponse
-def overallresponsestatplot(rawinputdf,timeinterval,ofilename):
+#%% overallresponse #buggy need check!!!
+def overallresponsestatplot(rawinputdf,timeinterval,ofilename,silent=False):
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
@@ -1035,14 +1024,19 @@ def overallresponsestatplot(rawinputdf,timeinterval,ofilename):
         numnotestr='Number of notes: '+str(row.numnote)
         numassignstr='Number of assignments: '+str(row.numassign)
         numclosedstr='Number of closed: '+str(row.numclosed)
+        numopenstr='Number of opened: '+str(row.numopened)
         schoolstr='School: ' + str(row.school)
         issuestr='Issues: ' + str(row.issue)
+        if bool(row.open):            
+            currstatus='Current status: Open'
+        else:
+            currstatus='Current status: Closed'
         try: 
              usernamestr='Username: ' + str(row.username.encode('utf-8'))
         except AttributeError:
              usernamestr='Username: ' + str(row.username)
         emailstr='Email: ' + str(row.email)        
-        textstr='<br>'.join([nummessagestr,issuestr,schoolstr,usernamestr,adminnamestr,emailstr,numnotestr,numassignstr,numclosedstr])#add in conversation id in case need to track back
+        textstr='<br>'.join([nummessagestr,issuestr,schoolstr,usernamestr,adminnamestr,emailstr,numnotestr,numassignstr,numclosedstr,numopenstr,currstatus])#add in conversation id in case need to track back
         textlst.append(textstr)
             
     data1 = Scatter(    x=responsestats['created_at'], y=fr/3600.0,
@@ -1061,7 +1055,7 @@ def overallresponsestatplot(rawinputdf,timeinterval,ofilename):
                         name='Last update', mode = 'lines+markers'
                         )
 
-    layout = Layout(    title='Overall response for last ' + plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    layout = Layout(    title='Overall response for last ' + plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                         yaxis=dict(title='Hours',dtick=5.0),
                         #xaxis=dict(title='Day')
                         xaxis=dict(     rangeselector=dict(
@@ -1072,15 +1066,18 @@ def overallresponsestatplot(rawinputdf,timeinterval,ofilename):
                                                        dict(step='all')
                                                        ])
                                                             ),
-                                        rangeslider=dict(),
+                                        #rangeslider=dict(),
                                         type='date'
                                       )
                         )
     fig = dict(data=[data1,data2,data3,data4], layout=layout )            
-    plot(fig,filename=ofilename)
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
 
 #%% Open conversations by day
-def openconvobytfplot(rawinputdf,timeinterval,ofilename):
+def openconvobytfplot(rawinputdf,timeinterval,ofilename,silent=False):
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
@@ -1096,7 +1093,7 @@ def openconvobytfplot(rawinputdf,timeinterval,ofilename):
         tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
         data_piv.append(tempdata_piv)
            
-    layout = Layout(title='Conversations still open at the end of day for past '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    layout = Layout(title='Conversations still open at the end of day for past '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversations'),                    
                     barmode='relative',                    
                     xaxis=dict(     rangeselector=dict(
@@ -1107,7 +1104,7 @@ def openconvobytfplot(rawinputdf,timeinterval,ofilename):
                                                        dict(step='all')
                                                        ])
                                                             ),
-                                        rangeslider=dict(),
+                                        #rangeslider=dict(),
                                         type='date'
                                       ),
                     annotations=[   dict(x=xi,y=yi, text=str(yi),
@@ -1115,10 +1112,13 @@ def openconvobytfplot(rawinputdf,timeinterval,ofilename):
                                     showarrow=False) for xi, yi in zip(day_piv.columns, convocount.values)]
                     )
     fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
 
 #%% Tags by timeframe
-def tagsbytfplot(inputdf,timeinterval,ofilename):    #y-axis:time, x-axis tags
+def tagsbytfplot(inputdf,timeinterval,ofilename,silent=False):    #y-axis:time, x-axis tags
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
@@ -1126,17 +1126,18 @@ def tagsbytfplot(inputdf,timeinterval,ofilename):    #y-axis:time, x-axis tags
 
     pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
 
-    day_piv=pivtable.ix[:,:-1]
+    day_piv=pivtable.ix[:-1,:-1]
     aggstats_piv=responsestats
     aggstats_piv=aggstats_piv.transpose()
-    mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
-    max_piv=aggstats_piv['max'].astype('timedelta64[s]')
+    #mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
+    #max_piv=aggstats_piv['max'].astype('timedelta64[s]')
+    convocount=pivtable.ix[-1,:]#last row
     
     data_piv=[]    
     for idx,row in day_piv.iterrows():
         tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
         data_piv.append(tempdata_piv)
-    
+    '''
     avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
                              name='Average Response time',yaxis='y2')    
     data_piv.append(avgresponse)
@@ -1144,21 +1145,27 @@ def tagsbytfplot(inputdf,timeinterval,ofilename):    #y-axis:time, x-axis tags
     longestresponse = Scatter(x=day_piv.columns, y=max_piv/3600.0,
                                  name='Longest Response time', yaxis='y2')    
     data_piv.append(longestresponse)    
-        
-    layout = Layout(title='Conversations (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    '''    
+    layout = Layout(title='Conversations (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversations'),
                     xaxis=dict(title='Date'),
                     barmode='relative',
-                    yaxis2=dict(title='Time (hours)',titlefont=dict(color='rgb(148, 103, 189)'),
-                                      tickfont=dict(color='rgb(148, 103, 189)'),
-                                      overlaying='y', side='right'
-                                  )
+                    #yaxis2=dict(title='Time (hours)',titlefont=dict(color='rgb(148, 103, 189)'),
+                    #                  tickfont=dict(color='rgb(148, 103, 189)'),
+                    #                  overlaying='y', side='right'
+                    #              )
+                    annotations=[   dict(x=xi,y=yi, text=str(yi),
+                                    xanchor='center', yanchor='bottom',
+                                    showarrow=False) for xi, yi in zip(day_piv.columns, convocount.values)]
                     )
     fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
     
 #%% Plot number of tags for the time interval
-def overalltagplot(inputdf,timeinterval,ofilename):#x-axis tags, y-axis number of tags
+def overalltagplot(inputdf,timeinterval,ofilename,silent=False):#x-axis tags, y-axis number of tags
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
@@ -1168,11 +1175,11 @@ def overalltagplot(inputdf,timeinterval,ofilename):#x-axis tags, y-axis number o
 
     #pivtable=inputpivtable[4].copy()#tagpivotdf
 
-    overall_piv=pivtable['Total']
+    overall_piv=pivtable['Total'][:-1]
     x=overall_piv.index.tolist()
     y=overall_piv.tolist() 
     datao_piv=[Bar(x=x, y=y)]
-    layout = Layout(title='Total conversations (n = '+ str(numconversations) +') split by tags for the last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    layout = Layout(title='Total conversations (n = '+ str(numconversations) +') split by tags for the last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Number'),
                     xaxis=dict(title='Tags'),
                     annotations=[   dict(x=xi,y=yi, text=str(yi),
@@ -1180,10 +1187,13 @@ def overalltagplot(inputdf,timeinterval,ofilename):#x-axis tags, y-axis number o
                                     showarrow=False) for xi, yi in zip(x, y)]
                     )
     fig = dict(data=datao_piv, layout=layout )
-    plot(fig,filename=ofilename)
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
     
 #%% PLot two overalltagplot for two timeintervals for comparison
-def overalltagplot2(inputdf,timeintervallist,ofilename):#dual timeframe comparison. x-axis tags, y-axis number of tags
+def overalltagplot2(inputdf,timeintervallist,ofilename,silent=False):#dual timeframe comparison. x-axis tags, y-axis number of tags
     datalist=[]
     nlist=[]
 
@@ -1195,10 +1205,10 @@ def overalltagplot2(inputdf,timeintervallist,ofilename):#dual timeframe comparis
 
         pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
                 
-        overall_piv=pivtable['Total']
+        overall_piv=pivtable['Total'][:-1]
         x=overall_piv.index.tolist()
         y=overall_piv.tolist()
-        datao_piv=Bar(x=x, y=y,name=plottf+' ( '+str(tfstart)+' - '+str(tfend)+' )')
+        datao_piv=Bar(x=x, y=y,name=plottf+' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )')
         
         datalist.append(datao_piv)
         nlist.append(str(numconversations))
@@ -1211,10 +1221,14 @@ def overalltagplot2(inputdf,timeintervallist,ofilename):#dual timeframe comparis
                     barmode='group'
                     )
     fig = dict(data=datalist, layout=layout )
-    plot(fig,filename=ofilename)    
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
+    
 
 #%% Issue handed by admin for the time interval
-def allconvobyadminplot(inputdf,timeinterval,ofilename): #need to check numbers. looks wrong*********************
+def allconvobyadminplot(inputdf,timeinterval,ofilename,silent=False): #need to check numbers. looks wrong*********************
     #allconvobyadminplot(topconvdfcopy,timeinterval,'test.html')
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
@@ -1225,17 +1239,18 @@ def allconvobyadminplot(inputdf,timeinterval,ofilename): #need to check numbers.
     
     #pivtable=inputpivtable[5].copy()#adminpivotdf
                
-    day_piv=pivtable.ix[:,:-1]
+    day_piv=pivtable.ix[:-1,:-1]
     aggstats_piv=responsestats
     aggstats_piv=aggstats_piv.transpose()
-    mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
-    max_piv=aggstats_piv['max'].astype('timedelta64[s]')
+    #mean_piv=aggstats_piv['mean'].astype('timedelta64[s]')    
+    #max_piv=aggstats_piv['max'].astype('timedelta64[s]')
+    convocount=pivtable.ix[-1,:]
     
     data_piv=[]    
     for idx,row in day_piv.iterrows():
         tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
         data_piv.append(tempdata_piv)
-    
+    '''
     avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
                              name='Average Response time',yaxis='y2')    
     data_piv.append(avgresponse)
@@ -1243,22 +1258,28 @@ def allconvobyadminplot(inputdf,timeinterval,ofilename): #need to check numbers.
     longestresponse = Scatter(x=day_piv.columns, y=max_piv/3600.0,
                                  name='Longest Response time', yaxis='y2')    
     data_piv.append(longestresponse)
-        
-    layout = Layout(title='Conversations (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    '''    
+    layout = Layout(title='Conversations (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversations'),
                     xaxis=dict(title='Admin name'),
                     barmode='relative',
-                    yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
-                                      tickfont=dict(color='rgb(148, 103, 189)'),
-                                      overlaying='y', side='right'
-                                  )
+                    #yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
+                    #                  tickfont=dict(color='rgb(148, 103, 189)'),
+                    #                  overlaying='y', side='right'
+                    #              )
+                    annotations=[   dict(x=xi,y=yi, text=str(yi),
+                                    xanchor='center', yanchor='bottom',
+                                    showarrow=False) for xi, yi in zip(day_piv.columns, convocount.values)]
                     )
     fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
     
 #%% Tags by timeframe
     #tagsbyschoolplot(expandtag(expandtag(topconvdfcopy,'issue'),'school'),timeinterval,'test.html')
-def tagsbyschoolplot(inputdf,timeinterval,ofilename):
+def tagsbyschoolplot(inputdf,timeinterval,ofilename,silent=False):
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
@@ -1280,15 +1301,18 @@ def tagsbyschoolplot(inputdf,timeinterval,ofilename):
         tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
         data_piv.append(tempdata_piv)        
         
-    layout = Layout(title='Conversation Tags by School (n = '+ str(n) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    layout = Layout(title='Conversation Tags by School (n = '+ str(n) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Tags'),
                     xaxis=dict(title='School'),
                     barmode='relative'                    
                     )
     fig = dict(data=data_piv, layout=layout )
-    plot(fig,filename=ofilename)
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
 #%% nontag plot
-def nonetagplot(inputdf, timeinterval,columnname,ofilename):
+def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
@@ -1325,24 +1349,30 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename):
         data_piv.append(tempdata_piv)
         admincounter+=1
         
-    layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversations status'),
                     xaxis=dict(title='Date')                
                     )
     fig = dict(data=data_piv, layout=layout)
-    plot(fig,filename=ofilename)
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)
     
     data_piv2=[]    
     for idx,row in pivtable.iterrows():
         tempdata_piv = Bar(x=pivtable.columns, y=row.values, name=idx)
         data_piv2.append(tempdata_piv)
         
-    layout2 = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend)+' )',
+    layout2 = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversation date'),
                     xaxis=dict(title='Adminname'),barmode='relative'               
                     )
     fig = dict(data=data_piv2, layout=layout2)
-    plot(fig,filename=ofilename+'byadmin')
+    if not silent:
+        plot(fig,filename=ofilename+'byadmin.html')
+    else:
+        plot(fig,filename=ofilename+'byadmin.html',auto_open=False)
         
 #%% Plotting
 #%%group by tf
@@ -1366,99 +1396,185 @@ topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
 
 issueschoolexpandeddf=expandtag(expandtag(topconvdfcopy,'issue'),'school')
 
+Alloutdisable=False
+
+pltsilent=[True,True]
+
 #save folders
 foldername=timenow.strftime("%Y%m%d-%H%M%S")
 pathbackup=os.path.abspath(os.path.join(outputfolder,foldername))     
-
 try: 
     os.makedirs(pathbackup)
 except OSError:
     if not os.path.isdir(pathbackup):
         raise
 
-Alloutdisable=False
-        
-outputstats=True
-if outputstats & ~Alloutdisable:
-    sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
-    sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
-    tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
+for idx,country in enumerate(countrylist):
+    #split by country
+    if idx==0:
+        tempexpanded=issueschoolexpandeddf[(issueschoolexpandeddf.adminname.isin(admindfbycountry[idx].name))|(issueschoolexpandeddf.adminname.isnull())] 
+        temptopconvdfcopy=topconvdfcopy[(topconvdfcopy.adminname.isin(admindfbycountry[idx].name))|(topconvdfcopy.adminname.isnull())] 
+    else:
+        tempexpanded=issueschoolexpandeddf[(issueschoolexpandeddf.adminname.isin(admindfbycountry[idx].name))]                                            
+        temptopconvdfcopy=topconvdfcopy[(topconvdfcopy.adminname.isin(admindfbycountry[idx].name))]                                            
     
-    response_csv_path=os.path.abspath(os.path.join(pathbackup,'response.csv'))
-    with open(response_csv_path, 'w') as f:
-        responsepivotdf.to_csv(f,sep='\t')
+    subfolderpath=os.path.abspath(os.path.join(outputfolder,foldername,country))     
     
-    resolve_csv_path=os.path.abspath(os.path.join(pathbackup,'resolve.csv'))        
-    with open(resolve_csv_path, 'w') as f:
-        resolvepivotdf.to_csv(f,sep='\t')        
+    try: 
+        os.makedirs(subfolderpath)
+    except OSError:
+        if not os.path.isdir(subfolderpath):
+            raise
+    
+    outputstats=True
+    if outputstats & ~Alloutdisable:
+        sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(tempexpanded,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
+        sliceddf_resp2, responsepivotdf2,numconversations2=generatetagpivtbl(tempexpanded,'s_response_bin',[timeframestartdt[1],timeframeenddt[1]])
+        sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(tempexpanded,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
+        tagpivotdf,responsestats,numconversations=generatetagpivdf(tempexpanded,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
         
-    dailytagcount_csv_path=os.path.abspath(os.path.join(pathbackup,'dailytagcount.csv'))            
-    with open(dailytagcount_csv_path, 'w') as f: 
-        tagpivotdf.to_csv(f,sep='\t')      
-
-plotallconvobyadmin=True
-if plotallconvobyadmin & ~Alloutdisable:        
-    allconvobyadminplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyAdmin.html')))
-
-plotoveralltags=True
-if plotoveralltags & ~Alloutdisable:
-    overalltagplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'Overalltagsformonth.html')))
-    overalltagplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforweek.html')))
-
-    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[2],timeframeenddt[2]],[timeframestartdt[3],timeframeenddt[3]]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforpast2month.html')))
-    overalltagplot2(issueschoolexpandeddf,[[timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]]],os.path.abspath(os.path.join(pathbackup,'Overalltagsforpast2week.html')))
+        #modify the results to look like AGP. possibly want to shift it to within function?
+        totalconvthisweek=responsepivotdf['Total'][-1]
+        uniquedresp=len(sliceddf_resp.convid.unique())    
+        totalconvpreviousweek=responsepivotdf2['Total'][-1]
+        uniquedresp2=len(sliceddf_resp2.convid.unique())
+        responsepivotdf['%']=responsepivotdf['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
+        
+        #try:
+        #    within4hours=float(responsepivotdf['Total'][-1]-responsepivotdf[5][-1])/totalconvthisweek*100
             
-plotopenconvobytf=True    
-if plotopenconvobytf & ~Alloutdisable:
-    openconvobytfplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'openbyday_1W.html')))    
-    openconvobytfplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'openbyday_1M.html')))
-    
-plottagsbyday=True
-if plottagsbyday & ~Alloutdisable:    
-    tagsbytfplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyday.html')))
-            
-plotoverallresponsestats=True
-if plotoverallresponsestats & ~Alloutdisable:
-    overallresponsestatplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'overallresponse_1W.html')))
-    overallresponsestatplot(topconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'overallresponse_1M.html')))
+        within4hours=[]
+        for i in xrange(4): 
+            try:
+                within4hours.append(responsepivotdf[i+1].ix['Total'])
+            except KeyError:
+                print('Missing response timebin: ' + str(i+1))
+                pass
+        within4hours=float(sum(within4hours))/totalconvthisweek*100
+        #except KeyError:
+        #    within4hours=None
+        unresolvedthisweek=resolvepivotdf[0]['Total']
+        uniquedunresolved=len(sliceddf_resolv[sliceddf_resolv['s_resolve_bin']==0].convid.unique())
         
-    #overallresponsestatplot(stats[2][7],'overallresponse_6M.html','6 Months')
-    #overallresponsestatplot(stats[3][7],'overallresponse_1Y.html','Year') 
+        #rename so that column labels make sense
+        responsepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',5:'>4','Total':'Grand Total',0:'UN'}, inplace=True)
+        cols=resolvepivotdf.columns.tolist()
+        if cols[0]==0: #handle when there are unresolved conversations
+            cols=cols[1:-1]+[cols[0]]+[cols[-1]]
+            resolvepivotdf=resolvepivotdf[cols]
+                
+        resolvepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',10:'4-10',24:'>24',0:'UN','Total':'Grand Total'}, inplace=True)
+        
+        #generate files
+        outputexcelpath=os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx'))
+           
+        # Create a Pandas Excel writer using XlsxWriter as the engine.
+        writer = pd.ExcelWriter(outputexcelpath, engine='xlsxwriter')
+                        
+        # Convert the dataframe to an XlsxWriter Excel object.
+        responserow=5
+        responsepivotdf.to_excel(writer, sheet_name='Sheet1',startrow=responserow)
+        
+        workbook  = writer.book
+        worksheet = writer.sheets['Sheet1']
+        worksheet.write_string(0, 0,'Weekly Email Support Summary')
+        worksheet.write_string(3, 0,'Email Response')        
+        merge_format = workbook.add_format({
+                                                #'bold':     True,
+                                                #'border':   6,
+                                                'align':    'center',
+                                                'valign':   'vcenter'#,
+                                                #'fg_color': '#D7E4BC',
+                                            })    
+        #merge_range(first_row, first_col, last_row, last_col, data[, cell_format])
+        worksheet.merge_range(responserow-1,1,responserow-1,7, 'No. of hours taken to Respond',merge_format)
+        worksheet.write_string(responserow-1, 0,'Category')
+        if within4hours:
+            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
+        else:
+            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
 
-plottagsbyschool=True
-if plottagsbyschool & ~Alloutdisable:
-    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1W.html')))
-    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1M.html')))
-    tagsbyschoolplot(issueschoolexpandeddf,[timeframestartdt[5],timeframeenddt[5]],os.path.abspath(os.path.join(pathbackup,'tagsbyschool_1Y.html')))
+        
+        summaryrow=responserow+len(responsepivotdf)+3
+        worksheet.write_string(summaryrow, 0,'Summary:')
+        worksheet.write_string(summaryrow+1, 0,'1) Total of ' + str(totalconvthisweek) + ' ('+ str(uniquedresp) +' conversations) email support cases. (Prev week: ' + str(totalconvpreviousweek) + ' ('+ str(uniquedresp2) +' conversations))')
+        worksheet.write_string(summaryrow+2, 0,'2) Unresolved emails: ' + str(unresolvedthisweek)+' ('+str(uniquedunresolved)+' conversations)') 
+                
+        worksheet.write_string(summaryrow+6, 0,'Email Resolve')
+        
+        resolverow=summaryrow+7
+        worksheet.write_string(resolverow-1, 0,'Category')
+        worksheet.merge_range(resolverow-1,1,resolverow-1,8, 'No. of Hours taken to Resolve',merge_format)
+        
+        resolvepivotdf.to_excel(writer, sheet_name='Sheet1',startrow=resolverow)
+        tagpivotdf.to_excel(writer, sheet_name='Sheet1',startrow=resolverow+len(resolvepivotdf)+20)
+        format1=workbook.add_format({'font_color': 'white'})
+        worksheet.conditional_format(responserow+1,1,responserow+len(responsepivotdf),len(responsepivotdf.columns), {'type':     'cell',
+                                        'criteria': '=',
+                                        'value':    0,
+                                        'format':   format1})
+        worksheet.conditional_format(resolverow+1,1,resolverow+len(resolvepivotdf),len(resolvepivotdf.columns), {'type':     'cell',
+                                        'criteria': '=',
+                                        'value':    0,
+                                        'format':   format1})
+        
+        # Close the Pandas Excel writer and output the Excel file.
+        writer.save()    
+        
+        #response_csv_path=os.path.abspath(os.path.join(subfolderpath,'response.csv'))        
+        #with open(response_csv_path, 'w') as f:
+        #    responsepivotdf.to_csv(f,sep='\t')
+         
+        
+        #resolve_csv_path=os.path.abspath(os.path.join(subfolderpath,'resolve.csv'))        
+        #with open(resolve_csv_path, 'w') as f:
+        #    resolvepivotdf.to_csv(f,sep='\t')        
+            
+        #dailytagcount_csv_path=os.path.abspath(os.path.join(subfolderpath,'dailytagcount.csv'))            
+        #with open(dailytagcount_csv_path, 'w') as f: 
+        #    tagpivotdf.to_csv(f,sep='\t')      
     
-
-plotnonetags=True
-if plotnonetags & ~Alloutdisable:
-    nonetagplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'issue',os.path.abspath(os.path.join(pathbackup,'missingissue_1W.html')))
-    nonetagplot(topconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'school',os.path.abspath(os.path.join(pathbackup,'missingschool_1W')))
+    plotallconvobyadmin=True
+    if plotallconvobyadmin & ~Alloutdisable:        
+        allconvobyadminplot(tempexpanded,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'tagsbyAdmin_1W_'+country)),silent=pltsilent[idx])
     
-'''
-ilifetimestats=dict()
-lastweekstats=dict()
-lastmonthstats=dict()
-lasthalfyearstats=dict()
-lastyearstats=dict()
+    plotoveralltags=True
+    if plotoveralltags & ~Alloutdisable:
+        overalltagplot(tempexpanded,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(subfolderpath,'Overalltagsformonth_'+country)),silent=pltsilent[idx])
+        overalltagplot(tempexpanded,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'Overalltagsforweek_'+country)),silent=pltsilent[idx])
+    
+        overalltagplot2(tempexpanded,[[timeframestartdt[3],timeframeenddt[3]],[timeframestartdt[2],timeframeenddt[2]]],os.path.abspath(os.path.join(subfolderpath,'Overalltagsforpast2month_'+country)),silent=pltsilent[idx])
+        overalltagplot2(tempexpanded,[[timeframestartdt[1],timeframeenddt[1]],[timeframestartdt[0],timeframeenddt[0]]],os.path.abspath(os.path.join(subfolderpath,'Overalltagsforpast2week_'+country)),silent=pltsilent[idx])
+                
+    plotopenconvobytf=True    
+    if plotopenconvobytf & ~Alloutdisable:
+        openconvobytfplot(temptopconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'openbyday_1W_'+country)),silent=pltsilent[idx])    
+        openconvobytfplot(temptopconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(subfolderpath,'openbyday_1M_'+country)),silent=pltsilent[idx])
+        
+    plottagsbyday=True
+    if plottagsbyday & ~Alloutdisable:    
+        tagsbytfplot(tempexpanded,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'tagsbyday_1W_'+country)),silent=pltsilent[idx])
+                
+    plotoverallresponsestats=True
+    if plotoverallresponsestats & ~Alloutdisable:
+        overallresponsestatplot(temptopconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'overallresponse_1W_'+country)),silent=pltsilent[idx])
+        overallresponsestatplot(temptopconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(subfolderpath,'overallresponse_1M_'+country)),silent=pltsilent[idx])
+    
+    plottagsbyschool=True
+    if plottagsbyschool & ~Alloutdisable:
+        try:
+            tagsbyschoolplot(tempexpanded,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'tagsbyschool_1W_'+country)),silent=pltsilent[idx])
+            tagsbyschoolplot(tempexpanded,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(subfolderpath,'tagsbyschool_1M_'+country)),silent=pltsilent[idx])
+            tagsbyschoolplot(tempexpanded,[timeframestartdt[5],timeframeenddt[5]],os.path.abspath(os.path.join(subfolderpath,'tagsbyschool_1Y_'+country)),silent=pltsilent[idx])
+        except Exception, err:
+            print(err)
+            pass
 
-#statslist=[lastweekstats,lastmonthstats,lasthalfyearstats,lastyearstats]
+    plotnonetags=True
+    if plotnonetags & ~Alloutdisable:
+        nonetagplot(temptopconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'issue',os.path.abspath(os.path.join(subfolderpath,'missingissue_1W_'+country)),silent=pltsilent[idx])
+        nonetagplot(temptopconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],'school',os.path.abspath(os.path.join(subfolderpath,'missingschool_1W_'+country)),silent=pltsilent[idx])    
 
-timeframe=[7,30,180,365]
-timeframedt=[timenow.date()-datetime.timedelta(dt) for dt in timeframe]
-responseattrs=['s_to_first_response','s_to_first_closed','s_to_last_closed','s_to_last_update']
-
-def getstats(df,tf):
-     temptimedf=df.loc[item['created_at_Date'] >= tf]
-     timestats=temptimedf[responseattrs].describe()
-     numconv=len(temptimedf)
-     numopen=temptimedf['open'].sum()
-     #top # tags
-     #top schools
-     return {'data':temptimedf,'stats':timestats,'numconv':numconv,'numopen':numopen}
-'''
 #%% group by admin
 #adminconvdfcopy.loc['Sun'].describe()
 #adminconvdfcopy[['s_to_first_response','s_to_first_closed','s_to_last_closed']]
