@@ -50,6 +50,7 @@ import pandas as pd
 from ast import literal_eval
 import tictocgen as tt
 import xlsxwriter
+from bs4 import BeautifulSoup
 
 from intercom import Intercom
 
@@ -309,6 +310,30 @@ def getadminname(s,admindf):
      else:
           adminname=None
      return adminname             
+
+def changenonetostr(s):    #assuming issues are in list
+    if not s:
+        return 'None'
+    else:
+        return s
+        
+def changenonetoNone(s):    #
+    if s=='None':
+        return None
+    else:
+        return s
+        
+def changenonetotimedeltazero(s):    #grrr
+    if s=='None' or s is None:
+        return pd.Timedelta(0)
+    else:
+        return s
+        
+def changenattotimedeltazero(s):    #assuming issues are in list
+    if type(s)==pd.tslib.NaTType:
+        return pd.Timedelta(0)
+    else:
+        return s
      
 #%% Get all conversations
 from intercom import Conversation
@@ -496,11 +521,13 @@ if rebuild[0]:
                     temptaglist.append(tagdf['name'][tagdf['id']==temptagid].item())                         
                #conv_message['tags']=','.join(temptaglist) #incase need to convert to strlist
                conv_message['tags']=temptaglist
+          conv_message['body']=changenonetostr(conv_message['body'])
+          conv_message['body']=BeautifulSoup(conv_message['body']).get_text()
           
           #useless attributes
           del conv_message['changed_attributes']
           del conv_message['attachments']
-          del conv_message['body'] #<-- tracking?
+          #del conv_message['body'] #<-- tracking?
           del conv_message['subject']
           del conv_message['url']
                     
@@ -534,7 +561,10 @@ if rebuild[0]:
                          conv_part['tags']=temptaglist          
                except KeyError:
                     conv_part['tags']=None
-                                              
+               '''
+               conv_part['body']=changenonetostr(conv_part['body'])
+               conv_part['body']=BeautifulSoup(conv_part['body']).get_text()
+               '''
                #useless attributes                            
                del conv_part['updated_at']
                del conv_part['external_id']
@@ -586,7 +616,7 @@ else:
      print ('Loaded Conversations from csv')   
 
 #tt.toc()
-
+print('Time started: '+ str(datetime.datetime.now()))        
 #%% Calculate values to update adminconvdf
 # Get First response, first closed, last closed
 def getkeytimestats(s,refconvdf):
@@ -626,6 +656,9 @@ def getconvpartnum(s,refconvdf):
     #Force name change
     numcount.rename({ 'close' : 'numclosed','comment':'nummessage','assignment':'numassign','note':'numnote','open':'numopened'},inplace=True)    
     return numcount
+    
+def getfirstmessage(s,refconvdf):
+    return refconvdf[(refconvdf.convid==s) & (refconvdf.part_type=='initial')].body.iloc[0]
         
 def gettotaltags(s,refconvdf):         
      taglist=[]     
@@ -686,29 +719,7 @@ def countissue(s):    #assuming issues are in list
     else:
         return 0              
         
-def changenonetostr(s):    #assuming issues are in list
-    if not s:
-        return 'None'
-    else:
-        return s
-        
-def changenonetoNone(s):    #
-    if s=='None':
-        return None
-    else:
-        return s
-        
-def changenonetotimedeltazero(s):    #grrr
-    if s=='None' or s is None:
-        return pd.Timedelta(0)
-    else:
-        return s
-        
-def changenattotimedeltazero(s):    #assuming issues are in list
-    if type(s)==pd.tslib.NaTType:
-        return pd.Timedelta(0)
-    else:
-        return s
+
 
 def bintime(s,tunit,timebin,nanval):    
     #timeunits=s / np.timedelta64(1, unit)
@@ -793,6 +804,8 @@ if rebuild[1]:
          splitdatetime(toaugment,datetimeattrlist[0]) 
          #add end of created day
          toaugment['created_at_EOD']=toaugment.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
+         #add first message text
+         toaugment['firstmessage']=toaugment.convid.apply(lambda s: getfirstmessage(s,convdf))
          
          #merge the missing files!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! columns of missing and temptopconvdf different!!!!!!!!!need to check!!!! appending is screwing things up!     
          #missing is missing username(converted name from id)
@@ -1377,6 +1390,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
 #%% Plotting
 #%%group by tf
 print('Generating plots')
+print('Time started: '+ str(datetime.datetime.now()))        
 #timeframe=[7,30,180,365]
 timeframeend=[0,8,0,31,0,0]#[w1,w2,m1,m2,0.5y,1y]
 timeframestart=[7,15,30,61,180,365]
@@ -1453,7 +1467,12 @@ for idx,country in enumerate(countrylist):
         within4hours=float(sum(within4hours))/totalconvthisweek*100
         #except KeyError:
         #    within4hours=None
-        unresolvedthisweek=resolvepivotdf[0]['Total']
+        try:
+             unresolvedthisweek=resolvepivotdf[0]['Total']
+        except KeyError:
+             unresolvedthisweek=0
+             print ('No unresolved found')
+                       
         uniquedunresolved=len(sliceddf_resolv[sliceddf_resolv['s_resolve_bin']==0].convid.unique())
         
         #rename so that column labels make sense
