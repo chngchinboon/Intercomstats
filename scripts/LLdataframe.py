@@ -6,7 +6,8 @@ Created on Wed Nov 16 16:19:36 2016
 ########################################################################################################
 #Possible errors in overalresponse
 #Possible errors in merging/updating local database
-
+#missing issues plot has errors. reports untagged conversations, but in reality
+#they're tagged. Clusters of errors usually signify errors. possible local db not updated properly.
 
 
 #known flaws 28/12/2016
@@ -47,6 +48,7 @@ from plotly.graph_objs import Bar, Layout, Scatter
 
 import numpy as np
 import pandas as pd
+import re
 from ast import literal_eval
 import tictocgen as tt
 import xlsxwriter
@@ -309,7 +311,7 @@ def getadminname(s,admindf):
           adminname=extractednamelist[0]
      else:
           adminname=None
-     return adminname             
+     return adminname
 
 def changenonetostr(s):    #assuming issues are in list
     if not s:
@@ -334,9 +336,27 @@ def changenattotimedeltazero(s):    #assuming issues are in list
         return pd.Timedelta(0)
     else:
         return s
+
+def parsingconvtext(retrievedtext,customtextlist):
+    newtext=changenonetostr(retrievedtext)
+    newtext=BeautifulSoup(newtext).get_text()          
+    #remove http links
+    newtext=re.sub(r'http\S+', '', newtext)
+    newtext=re.sub(r'\r\r\r\n', ' ', newtext)
+    #remove LL specific text
+    if customtextlist:
+        for i in customtextlist:
+            newtext=re.sub(i, '', newtext)
+    return newtext
      
 #%% Get all conversations
 from intercom import Conversation
+
+#load issue from file
+texttoremove = []
+with open(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir,'textlist.txt'))) as inputfile:
+    for line in inputfile:
+        texttoremove.append(line.strip())
 
 def getfewconv(df, convobj, num):
     if df is not None:     
@@ -461,7 +481,7 @@ if rebuild[1]:
           itercounter+=1
           
           #df=pd.Series([dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role'))])
-     tomergedf=tomergedf.merge(pd.DataFrame(df,columns=['username','email']),left_index=True, right_index=True)#probably wrong here df going crazy     
+     tomergedf=tomergedf.reset_index().merge(pd.DataFrame(df,columns=['username','email']),left_index=True, right_index=True)#probably wrong here df going crazy. update:30/1/17, merging properly now     
      
      #tomergedf.update()
      
@@ -521,8 +541,7 @@ if rebuild[0]:
                     temptaglist.append(tagdf['name'][tagdf['id']==temptagid].item())                         
                #conv_message['tags']=','.join(temptaglist) #incase need to convert to strlist
                conv_message['tags']=temptaglist
-          conv_message['body']=changenonetostr(conv_message['body'])
-          conv_message['body']=BeautifulSoup(conv_message['body']).get_text()
+          conv_message['body']=parsingconvtext(conv_message['body'],texttoremove)          
           
           #useless attributes
           del conv_message['changed_attributes']
@@ -561,15 +580,14 @@ if rebuild[0]:
                          conv_part['tags']=temptaglist          
                except KeyError:
                     conv_part['tags']=None
-               '''
-               conv_part['body']=changenonetostr(conv_part['body'])
-               conv_part['body']=BeautifulSoup(conv_part['body']).get_text()
-               '''
+               
+               conv_part['body']=parsingconvtext(conv_part['body'],texttoremove)               
+               
                #useless attributes                            
                del conv_part['updated_at']
                del conv_part['external_id']
                del conv_part['changed_attributes']
-               del conv_part['body']
+               #del conv_part['body']
                del conv_part['attachments']
                
                #append to final list  
