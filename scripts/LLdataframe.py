@@ -54,7 +54,7 @@ import tictocgen as tt
 import xlsxwriter
 from bs4 import BeautifulSoup
 
-from intercom import Intercom
+from intercom.client import Client
 
 import os.path
 
@@ -63,14 +63,14 @@ outputfolder=os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir)))
-from configs import pid,key
+from configs import pat
 
 #from intercom.client import Client
 #pat=pid
-#intercom = Client(personal_access_token=pat)
+intercom = Client(personal_access_token=pat)
 
-Intercom.app_id = pid
-Intercom.app_api_key = key
+#Intercom.app_id = pid
+#Intercom.app_api_key = key
 
 #Intercom.app_id = 
 #Intercom.app_api_key = ''
@@ -99,7 +99,8 @@ toplot=False
 
 #rebuild=[rebuildconvdf,rebuildtopconvdf,rebuilduser]
 rebuild=[[],[],[]]
-datetimeattrlist=['created_at','first_response','first_closed','last_closed','updated_at']
+#date from intercom is in UTC.
+datetimeattrlist=['created_at','first_response','first_closed','last_closed','updated_at','created_at_EOD']
 datetimeattrspltlist=['created_at_Date','created_at_Time']
 timedeltaattrlist=['s_to_first_response','s_to_first_closed','s_to_last_closed','s_to_last_update']
 #listlist=['issue','school']
@@ -183,8 +184,8 @@ if topconvdf is not None:
     #school and tags read in as unicode
      
 #%% Get admin info #small enough that can quickly get
-from intercom import Admin
-admindf=pd.DataFrame([x.__dict__ for x in Admin.all()]) 
+#from intercom import Admin
+admindf=pd.DataFrame([x.__dict__ for x in intercom.admins.all()]) 
 print('Retrieved Admin Df from Intercom')
 
 #split admin by country
@@ -200,12 +201,13 @@ countrylist=['Sg','My']
 admindfbycountry=[admindf_SG,admindf_MY]
 
 #%%Count
-from intercom import Count
-AdminCount=pd.DataFrame(Count.conversation_counts_for_each_admin)
+#from intercom import Count
+#AdminCount=pd.DataFrame(Count.conversation_counts_for_each_admin)
+AdminCount=pd.DataFrame(intercom.counts.for_type(type='conversation', count='admin').conversation['admin'])
 print('Retrieved AdminCount Df from Intercom')
 #%% Get tags
-from intercom import Tag
-tagdf=pd.DataFrame([x.__dict__ for x in Tag.all()])
+#from intercom import Tag
+tagdf=pd.DataFrame([x.__dict__ for x in intercom.tags.all()])
 
 #load issue from file
 issuename = []
@@ -222,7 +224,7 @@ schooltag=tagdf[~tagdf.name.isin(issuename)]
 print('Retrieved Issuetag and Schooltag Df from Intercom')
 #%% Get Users ##########too large. need scrolling api
 #loading from csv may not give recent info. need to pull from intercom for latest
-from intercom import User
+#from intercom import User
 userdatetimeattrlist=['created_at','last_request_at','remote_created_at','signed_up_at','updated_at']
         
 def getfewusers(df, obj, num):#consider using updated_at to check if user needs to be updated!
@@ -253,7 +255,7 @@ def getfewusers(df, obj, num):#consider using updated_at to check if user needs 
 if rebuild[2]:
     print('Retrieving recent users from Intercom. This may take awhile......')    
     getmore=True    
-    userobj=User.all()
+    userobj=intercom.users.all()
     itercounter=1
     if userdf is None:
         print('Userdf missing. Rebuilding from scratch')
@@ -293,7 +295,7 @@ def splitdatetime(dataframe,attrlist):
      for item in attrlist:
           if hasattr(dataframe, item):
                #try:
-               temp = pd.DatetimeIndex(dataframe[item])                   
+               temp = pd.DatetimeIndex(dataframe[item])
                #except TypeError:               
                #    print(item)                   
                #    print(type(item))
@@ -350,7 +352,7 @@ def parsingconvtext(retrievedtext,customtextlist):
     return newtext
      
 #%% Get all conversations
-from intercom import Conversation
+#from intercom import Conversation
 
 #load issue from file
 texttoremove = []
@@ -360,7 +362,7 @@ with open(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir,'t
 
 def getfewconv(df, convobj, num):
     if df is not None:     
-         latestupdate=df.updated_at.max() #latest update available in df.
+         latestupdate=df.updated_at.max()#-pd.Timedelta('7 days') #1 week before the max of the df  <--- depending on how often the script is run!!!!!!!! 
     else:
          latestupdate=pd.to_datetime(0)
              
@@ -375,7 +377,9 @@ def getfewconv(df, convobj, num):
              break
     
     tempconvdf=pd.DataFrame(tempdictlist)
-    #collect only those later than the df
+    #collect only those later than latestupdate    
+    
+    #convert to local timezone    
     tempconvdf=tempconvdf[pd.to_datetime(tempconvdf.updated_at,unit='s') > latestupdate]    
     numtoupdate=len(tempconvdf)     
     
@@ -389,9 +393,9 @@ if rebuild[1]:
          print ('Convdf is empty. Rebuilding from scratch')
      
      tomergedf=[]
-     convobj=Conversation.find_all()
+     convobj=intercom.conversations.find_all()
      getmore=True          
-     retrievenumi=50
+     retrievenumi=100
      itercounter=1
      updatenumaccu=0
      while getmore== True:
@@ -460,7 +464,7 @@ if rebuild[1]:
        
           if sum(idxdf)==0:#ask intercom
                #print('Missing user '+str(userid)+'  from dataframe. Retrieving from Intercom instead')                                      
-               userdetails=User.find(id=userid).__dict__.copy()    #convert to dict for storage into df
+               userdetails=intercom.users.find(id=userid).__dict__.copy()    #convert to dict for storage into df
                #convert to df for merging
                userdetails=pd.DataFrame([userdetails])#need to place in list mode. possible source of error
                #convert datetime attributes to datetime objects
@@ -515,7 +519,7 @@ if rebuild[0]:
                pass          
          
           #get valuves     
-          convobj=Conversation.find(id=convid) #return conversation object 
+          convobj=intercom.conversations.find(id=convid) #return conversation object 
           #object already has datetime attributes that are in proper format. changing to dict causes them to turn into seconds. doesn't matter can change whole column into datetime when in df form
          
           #message
@@ -529,7 +533,7 @@ if rebuild[0]:
           conv_message['assigned_to']=None
 
           #Modify attributes
-          conv_message['created_at']=convobj.created_at
+          conv_message['created_at']=convobj.created_at.replace(tzinfo=None)
           conv_message['msgid']=conv_message['id']     
           del conv_message['id']         
           conv_message['author']=conv_message['author'].id
@@ -593,8 +597,9 @@ if rebuild[0]:
                #append to final list  
                conv.append(conv_part)
                #Just in case the constant request trigger api limit
-               if Intercom.rate_limit_details['remaining']<25:
-                      print('Current rate: %d. Sleeping for 1 min' %Intercom.rate_limit_details['remaining'])
+               ratelimit=intercom.rate_limit_details
+               if ratelimit['remaining']<25:
+                      print('Current rate: %d. Sleeping for 1 min' %ratelimit['remaining'])
                       time.sleep(60)           
                       print('Resuming.....')
                       
@@ -887,7 +892,10 @@ else:
 def slicebytimeinterval(df,timeinterval,column='created_at_Date'):
     if timeinterval[0]>timeinterval[1]:
         print('Warning: timestart > timeend') 
-    sliceddf=df[(df[column] >= pd.to_datetime(timeinterval[0])) & (df[column] < pd.to_datetime(timeinterval[1]))]
+    if not column=='created_at_Time':
+        sliceddf=df[(df[column] >= pd.to_datetime(timeinterval[0])) & (df[column] < pd.to_datetime(timeinterval[1]))]
+    else:
+        sliceddf=df[(df[column] >= timeinterval[0]) & (df[column] < timeinterval[1])]
     return sliceddf
 
 
@@ -922,12 +930,14 @@ def generatetagpivtbl(inputdf,columnname, timeinterval):
     #resolvepivotdf=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])    
 
     sliceddf=slicebytimeinterval(inputdf,timeinterval)
+    if sliceddf.empty:
+        raise ValueError('Empty sliceddf')
     numconversations=len(sliceddf.convid.unique())
     
     workindf=sliceddf[['issue',columnname]]
     pivtable=workindf.pivot_table(index='issue', columns=columnname, aggfunc=len, fill_value=0)
     sumoftags=pd.DataFrame(pivtable.transpose().sum())    
-    pivtable['Total']=sumoftags
+    pivtable['Total']=sumoftags    
     sumoftagsbycolumn=pd.DataFrame(pivtable.sum(),columns=['Total'])
     pivtable=pivtable.append(sumoftagsbycolumn.transpose())
     
@@ -937,14 +947,14 @@ def generatetagpivtbl(inputdf,columnname, timeinterval):
 def generatetagpivdf(inputdf, columnname, timeinterval):
     #tagpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
     #adminpivotdf,responsestats,numconversations=generatetagpivdf(issueschoolexpandeddf,'adminname',[timeframestartdt[0],timeframeenddt[0]])
+        
     sliceddf, pivtable, numconversations=generatetagpivtbl(inputdf,columnname,timeinterval)
-    
-    #get response stats
+    #get response stats    
     tagRpivotdf=sliceddf[['s_to_first_response',columnname]]    
     tagRpivotdfdes=tagRpivotdf.groupby(columnname).describe()
     tagRpivotdfs=tagRpivotdfdes.unstack().loc[:,(slice(None),['mean','max'])]
     responsestats=tagRpivotdfs['s_to_first_response'].transpose()
-    
+        
     return pivtable, responsestats, numconversations
 
 #%% generate pivottables for opentags
@@ -1350,7 +1360,11 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
     plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
     
     pivtable, notag, numconversations = getnonetags(inputdf, timeinterval, columnname)
-        
+
+    #check if empty, exit if true
+    if notag.empty:
+        print ('No missing tags for '+ columnname + ' found')
+        return
     notag=notag.sort_values('created_at',ascending=True)        
     data_piv=[]  
     
@@ -1404,6 +1418,122 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
         plot(fig,filename=ofilename+'byadmin.html')
     else:
         plot(fig,filename=ofilename+'byadmin.html',auto_open=False)
+
+#%% AGP generation
+def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
+    #working hours 0830-1800
+    workinghourdf=slicebytimeinterval(inputdf,[datetime.time(8,30),datetime.time(18,0)],column='created_at_Time')
+    afterworkinghourdf=inputdf[~inputdf.convid.isin(workinghourdf.convid)]
+    
+    dftoprocess=[inputdf,workinghourdf,afterworkinghourdf]
+    
+    # Create a Pandas Excel writer using XlsxWriter as the engine.
+    writer = pd.ExcelWriter(ofilename, engine='xlsxwriter')
+    workbook  = writer.book   
+    
+    merge_format = workbook.add_format({
+                                                #'bold':     True,
+                                                #'border':   6,
+                                                'align':    'center',
+                                                'valign':   'vcenter'#,
+                                                #'fg_color': '#D7E4BC',
+                                            })    
+    
+    for idx,df in enumerate(dftoprocess):                
+        try:
+            sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(df,'s_response_bin',timeinterval)
+            sliceddf_resp2, responsepivotdf2,numconversations2=generatetagpivtbl(df,'s_response_bin',prevtimeinterval)
+            sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(df,'s_resolve_bin',timeinterval)  
+            tagpivotdf,responsestats,numconversations=generatetagpivdf(df,'created_at_Date',timeinterval)
+        except ValueError:
+            continue
+        #modify the results to look like AGP. possibly want to shift it to within function?
+        totalconvthisweek=responsepivotdf['Total'][-1]
+        uniquedresp=len(sliceddf_resp.convid.unique())    
+        totalconvpreviousweek=responsepivotdf2['Total'][-1]
+        uniquedresp2=len(sliceddf_resp2.convid.unique())
+        responsepivotdf['%']=responsepivotdf['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
+        
+        #try:
+        #    within4hours=float(responsepivotdf['Total'][-1]-responsepivotdf[5][-1])/totalconvthisweek*100
+            
+        within4hours=[]
+        for i in xrange(4): 
+            try:
+                within4hours.append(responsepivotdf[i+1].ix['Total'])
+            except KeyError:
+                print('Missing response timebin: ' + str(i+1))
+                pass
+        within4hours=float(sum(within4hours))/totalconvthisweek*100
+        #except KeyError:
+        #    within4hours=None
+        try:
+             unresolvedthisweek=resolvepivotdf[0]['Total']
+        except KeyError:
+             unresolvedthisweek=0
+             print ('No unresolved found')
+                       
+        uniquedunresolved=len(sliceddf_resolv[sliceddf_resolv['s_resolve_bin']==0].convid.unique())
+        
+        #rename so that column labels make sense
+        responsepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',5:'>4','Total':'Grand Total',0:'UN'}, inplace=True)
+        cols=resolvepivotdf.columns.tolist()
+        if cols[0]==0: #handle when there are unresolved conversations
+            cols=cols[1:-1]+[cols[0]]+[cols[-1]]
+            resolvepivotdf=resolvepivotdf[cols]
+                
+        resolvepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',10:'4-10',24:'>24',0:'UN','Total':'Grand Total'}, inplace=True)
+        
+        #Write to sheets
+        # Convert the dataframe to an XlsxWriter Excel object.
+        if idx==0:
+            sheetname='Overall'
+        elif idx==1:
+            sheetname='During Office Hours'
+        elif idx==2:
+            sheetname='After Office Hours'
+            
+        responserow=5
+        responsepivotdf.to_excel(writer, sheet_name=sheetname,startrow=responserow)
+                 
+        worksheet = workbook.sheetnames[sheetname]
+        worksheet.write_string(0, 0,'Weekly Email Support Summary')
+        worksheet.write_string(3, 0,'Email Response')        
+        
+        #merge_range(first_row, first_col, last_row, last_col, data[, cell_format])
+        worksheet.merge_range(responserow-1,1,responserow-1,7, 'No. of hours taken to Respond',merge_format)
+        worksheet.write_string(responserow-1, 0,'Category')
+        if within4hours:
+            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
+        else:
+            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
+            
+        summaryrow=responserow+len(responsepivotdf)+3
+        worksheet.write_string(summaryrow, 0,'Summary:')
+        worksheet.write_string(summaryrow+1, 0,'1) Total of ' + str(totalconvthisweek) + ' ('+ str(uniquedresp) +' conversations) email support cases. (Prev week: ' + str(totalconvpreviousweek) + ' ('+ str(uniquedresp2) +' conversations))')
+        worksheet.write_string(summaryrow+2, 0,'2) Unresolved emails: ' + str(unresolvedthisweek)+' ('+str(uniquedunresolved)+' conversations)') 
+                
+        worksheet.write_string(summaryrow+6, 0,'Email Resolve')
+        
+        resolverow=summaryrow+7
+        worksheet.write_string(resolverow-1, 0,'Category')
+        worksheet.merge_range(resolverow-1,1,resolverow-1,8, 'No. of Hours taken to Resolve',merge_format)
+        
+        resolvepivotdf.to_excel(writer, sheet_name=sheetname,startrow=resolverow)
+        tagpivotdf.to_excel(writer, sheet_name=sheetname,startrow=resolverow+len(resolvepivotdf)+20)
+        format1=workbook.add_format({'font_color': 'white'})
+        worksheet.conditional_format(responserow+1,1,responserow+len(responsepivotdf),len(responsepivotdf.columns), {'type':     'cell',
+                                        'criteria': '=',
+                                        'value':    0,
+                                        'format':   format1})
+        worksheet.conditional_format(resolverow+1,1,resolverow+len(resolvepivotdf),len(resolvepivotdf.columns), {'type':     'cell',
+                                        'criteria': '=',
+                                        'value':    0,
+                                        'format':   format1})
+        
+    # Close the Pandas Excel writer and output the Excel file.
+    #workbook.close()    
+    writer.save()
         
 #%% Plotting
 #%%group by tf
@@ -1420,6 +1550,14 @@ timeframeenddt=[timenow.date()-datetime.timedelta(dt) for dt in timeframeend]
 #for debugging
 #timeinterval=[timeframestartdt[0],timeframeenddt[0]]
 #ofilename='test'                
+
+#need to convert utc time to local
+for item in datetimeattrlist:               
+    if hasattr(topconvdfcopy, item): topconvdfcopy[item] = topconvdfcopy[item]+pd.Timedelta('8 hours')
+
+#resplit to update
+splitdatetime(topconvdfcopy,['created_at'])
+topconvdfcopy['created_at_EOD']=topconvdfcopy.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
              
 #change none to string so that can group
 topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
@@ -1460,116 +1598,7 @@ for idx,country in enumerate(countrylist):
     
     outputstats=True
     if outputstats & ~Alloutdisable:
-        sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(tempexpanded,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
-        sliceddf_resp2, responsepivotdf2,numconversations2=generatetagpivtbl(tempexpanded,'s_response_bin',[timeframestartdt[1],timeframeenddt[1]])
-        sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(tempexpanded,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])  
-        tagpivotdf,responsestats,numconversations=generatetagpivdf(tempexpanded,'created_at_Date',[timeframestartdt[0],timeframeenddt[0]])
-        
-        #modify the results to look like AGP. possibly want to shift it to within function?
-        totalconvthisweek=responsepivotdf['Total'][-1]
-        uniquedresp=len(sliceddf_resp.convid.unique())    
-        totalconvpreviousweek=responsepivotdf2['Total'][-1]
-        uniquedresp2=len(sliceddf_resp2.convid.unique())
-        responsepivotdf['%']=responsepivotdf['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
-        
-        #try:
-        #    within4hours=float(responsepivotdf['Total'][-1]-responsepivotdf[5][-1])/totalconvthisweek*100
-            
-        within4hours=[]
-        for i in xrange(4): 
-            try:
-                within4hours.append(responsepivotdf[i+1].ix['Total'])
-            except KeyError:
-                print('Missing response timebin: ' + str(i+1))
-                pass
-        within4hours=float(sum(within4hours))/totalconvthisweek*100
-        #except KeyError:
-        #    within4hours=None
-        try:
-             unresolvedthisweek=resolvepivotdf[0]['Total']
-        except KeyError:
-             unresolvedthisweek=0
-             print ('No unresolved found')
-                       
-        uniquedunresolved=len(sliceddf_resolv[sliceddf_resolv['s_resolve_bin']==0].convid.unique())
-        
-        #rename so that column labels make sense
-        responsepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',5:'>4','Total':'Grand Total',0:'UN'}, inplace=True)
-        cols=resolvepivotdf.columns.tolist()
-        if cols[0]==0: #handle when there are unresolved conversations
-            cols=cols[1:-1]+[cols[0]]+[cols[-1]]
-            resolvepivotdf=resolvepivotdf[cols]
-                
-        resolvepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',10:'4-10',24:'>24',0:'UN','Total':'Grand Total'}, inplace=True)
-        
-        #generate files
-        outputexcelpath=os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx'))
-           
-        # Create a Pandas Excel writer using XlsxWriter as the engine.
-        writer = pd.ExcelWriter(outputexcelpath, engine='xlsxwriter')
-                        
-        # Convert the dataframe to an XlsxWriter Excel object.
-        responserow=5
-        responsepivotdf.to_excel(writer, sheet_name='Sheet1',startrow=responserow)
-        
-        workbook  = writer.book
-        worksheet = writer.sheets['Sheet1']
-        worksheet.write_string(0, 0,'Weekly Email Support Summary')
-        worksheet.write_string(3, 0,'Email Response')        
-        merge_format = workbook.add_format({
-                                                #'bold':     True,
-                                                #'border':   6,
-                                                'align':    'center',
-                                                'valign':   'vcenter'#,
-                                                #'fg_color': '#D7E4BC',
-                                            })    
-        #merge_range(first_row, first_col, last_row, last_col, data[, cell_format])
-        worksheet.merge_range(responserow-1,1,responserow-1,7, 'No. of hours taken to Respond',merge_format)
-        worksheet.write_string(responserow-1, 0,'Category')
-        if within4hours:
-            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
-        else:
-            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
-
-        
-        summaryrow=responserow+len(responsepivotdf)+3
-        worksheet.write_string(summaryrow, 0,'Summary:')
-        worksheet.write_string(summaryrow+1, 0,'1) Total of ' + str(totalconvthisweek) + ' ('+ str(uniquedresp) +' conversations) email support cases. (Prev week: ' + str(totalconvpreviousweek) + ' ('+ str(uniquedresp2) +' conversations))')
-        worksheet.write_string(summaryrow+2, 0,'2) Unresolved emails: ' + str(unresolvedthisweek)+' ('+str(uniquedunresolved)+' conversations)') 
-                
-        worksheet.write_string(summaryrow+6, 0,'Email Resolve')
-        
-        resolverow=summaryrow+7
-        worksheet.write_string(resolverow-1, 0,'Category')
-        worksheet.merge_range(resolverow-1,1,resolverow-1,8, 'No. of Hours taken to Resolve',merge_format)
-        
-        resolvepivotdf.to_excel(writer, sheet_name='Sheet1',startrow=resolverow)
-        tagpivotdf.to_excel(writer, sheet_name='Sheet1',startrow=resolverow+len(resolvepivotdf)+20)
-        format1=workbook.add_format({'font_color': 'white'})
-        worksheet.conditional_format(responserow+1,1,responserow+len(responsepivotdf),len(responsepivotdf.columns), {'type':     'cell',
-                                        'criteria': '=',
-                                        'value':    0,
-                                        'format':   format1})
-        worksheet.conditional_format(resolverow+1,1,resolverow+len(resolvepivotdf),len(resolvepivotdf.columns), {'type':     'cell',
-                                        'criteria': '=',
-                                        'value':    0,
-                                        'format':   format1})
-        
-        # Close the Pandas Excel writer and output the Excel file.
-        writer.save()    
-        
-        #response_csv_path=os.path.abspath(os.path.join(subfolderpath,'response.csv'))        
-        #with open(response_csv_path, 'w') as f:
-        #    responsepivotdf.to_csv(f,sep='\t')
-         
-        
-        #resolve_csv_path=os.path.abspath(os.path.join(subfolderpath,'resolve.csv'))        
-        #with open(resolve_csv_path, 'w') as f:
-        #    resolvepivotdf.to_csv(f,sep='\t')        
-            
-        #dailytagcount_csv_path=os.path.abspath(os.path.join(subfolderpath,'dailytagcount.csv'))            
-        #with open(dailytagcount_csv_path, 'w') as f: 
-        #    tagpivotdf.to_csv(f,sep='\t')      
+        agpgen(tempexpanded, [timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]],os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx')))
     
     plotallconvobyadmin=True
     if plotallconvobyadmin & ~Alloutdisable:        
