@@ -25,6 +25,7 @@ Created on Wed Nov 16 16:19:36 2016
 
 #next version
 ##### DataBase #######################
+#not working well :(
 #build offline database for each intercom model. Done
 #at every start, check for difference, merge if possible. Done
 #check for match every iteration since find_all is based on last_update.  Done
@@ -315,9 +316,9 @@ def getadminname(s,admindf):
           adminname=None
      return adminname
 
-def changenonetostr(s):    #assuming issues are in list
+def changenonetostr(s,text='None'):    #assuming issues are in list
     if not s:
-        return 'None'
+        return text
     else:
         return s
         
@@ -362,7 +363,7 @@ with open(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir,'t
 
 def getfewconv(df, convobj, num):
     if df is not None:     
-         latestupdate=df.updated_at.max()#-pd.Timedelta('7 days') #1 week before the max of the df  <--- depending on how often the script is run!!!!!!!! 
+         latestupdate=df.updated_at.max()-pd.Timedelta('1 days') #1 day before the max of the df  <--- depending on how often the script is run!!!!!!!! 
     else:
          latestupdate=pd.to_datetime(0)
              
@@ -597,12 +598,13 @@ if rebuild[0]:
                #append to final list  
                conv.append(conv_part)
                #Just in case the constant request trigger api limit
+               '''
                ratelimit=intercom.rate_limit_details
                if ratelimit['remaining']<25:
                       print('Current rate: %d. Sleeping for 1 min' %ratelimit['remaining'])
                       time.sleep(60)           
                       print('Resuming.....')
-                      
+               '''
           itercounter+=1
           
      convdftomerge=pd.DataFrame(conv)
@@ -816,12 +818,15 @@ if rebuild[1]:
          toaugment['numissues']=toaugment.issue.apply(lambda s: countissue(s))    
          
          #bintime for pivot tables
-         toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',[1,2,3,4,5],0))
+         responsebinlist=[1,2,3,4,5]
+         resolvebinlist=[1,2,3,4,12,24,25]
+         toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: bintime(s,'h',responsebinlist,0))
          #can't print if type is replaced with str None
          #Have to fill nattype with none first #this screws with plotly.
          #toaugment['s_to_last_closed'] = toaugment.s_to_last_closed.apply(lambda x: x if isinstance(x, pd.tslib.Timedelta) 
          #                                      and not isinstance(x, pd.tslib.NaTType) else 'None')    
-         toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',[1,2,3,4,5,10,24],0))
+         
+         toaugment['s_resolve_bin']=toaugment.s_to_last_closed.apply(lambda s: bintime(s,'h',resolvebinlist,0))
     
          #split datetime for created_at into two parts so that can do comparison for time binning
          splitdatetime(toaugment,datetimeattrlist[0]) 
@@ -925,7 +930,7 @@ def expandtag(df,tagtype): #need to double check to see if truly duplicating pro
 
  
 #%% response and resolve pivottables for excel csv
-def generatetagpivtbl(inputdf,columnname, timeinterval):
+def generatetagpivtbl(inputdf,columnname, timeinterval,forcecolumns=None):
     #responsepivotdf=generatetagpivtbl(issueschoolexpandeddf,'s_response_bin',[timeframestartdt[0],timeframeenddt[0]])
     #resolvepivotdf=generatetagpivtbl(issueschoolexpandeddf,'s_resolve_bin',[timeframestartdt[0],timeframeenddt[0]])    
 
@@ -936,11 +941,18 @@ def generatetagpivtbl(inputdf,columnname, timeinterval):
     
     workindf=sliceddf[['issue',columnname]]
     pivtable=workindf.pivot_table(index='issue', columns=columnname, aggfunc=len, fill_value=0)
+        
     sumoftags=pd.DataFrame(pivtable.transpose().sum())    
     pivtable['Total']=sumoftags    
     sumoftagsbycolumn=pd.DataFrame(pivtable.sum(),columns=['Total'])
     pivtable=pivtable.append(sumoftagsbycolumn.transpose())
     
+    if forcecolumns:
+        for colname in forcecolumns:
+            if colname not in pivtable.columns.values:
+                pivtable[colname]=0
+        pivtable.sort_index(axis=1,inplace=True)
+                                
     return sliceddf, pivtable, numconversations
     
 #%% generate pivotables for issues and adminname
@@ -1358,16 +1370,20 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
     plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
-    
+    #in case not assigned yet, adminname will be empty
+    #inputdf.adminname=inputdf.adminname.apply(lambda s: changenonetostr(s,'Unassigned'))
+    #inputdf.adminname.fillna('Unassigned',inplace=True)
+    #inputdf.school=inputdf.school.apply(lambda s: changenonetostr(s))
     pivtable, notag, numconversations = getnonetags(inputdf, timeinterval, columnname)
 
     #check if empty, exit if true
     if notag.empty:
         print ('No missing tags for '+ columnname + ' found')
         return
-    notag=notag.sort_values('created_at',ascending=True)        
-    data_piv=[]  
+    notag=notag.sort_values('created_at',ascending=True)
     
+    data_piv=[]  
+        
     groupedbyadminname=notag.groupby('adminname')
     admincounter=0
     for groupname, item in groupedbyadminname:
@@ -1392,7 +1408,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
                    name=str(groupname), text=textlst, textposition='top'
                    )
         data_piv.append(tempdata_piv)
-        admincounter+=1
+        admincounter+=1        
         
     layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversations status'),
@@ -1407,7 +1423,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
     data_piv2=[]    
     for idx,row in pivtable.iterrows():
         tempdata_piv = Bar(x=pivtable.columns, y=row.values, name=idx)
-        data_piv2.append(tempdata_piv)
+        data_piv2.append(tempdata_piv)        
         
     layout2 = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversation date'),
@@ -1421,11 +1437,24 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
 
 #%% AGP generation
 def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
-    #working hours 0830-1800
-    workinghourdf=slicebytimeinterval(inputdf,[datetime.time(8,30),datetime.time(18,0)],column='created_at_Time')
-    afterworkinghourdf=inputdf[~inputdf.convid.isin(workinghourdf.convid)]
+    #split weekday from weekend
+    weekdaynumdf=inputdf.created_at_Date.apply(lambda s: s.weekday())
+    weekdaydf=inputdf[weekdaynumdf<5]
+    weekenddf=inputdf[weekdaynumdf>=5]
     
-    dftoprocess=[inputdf,workinghourdf,afterworkinghourdf]
+    #working hours 0830-1800
+    workinghourdf=slicebytimeinterval(weekdaydf,[datetime.time(8,30),datetime.time(18,0)],column='created_at_Time')
+    afterworkinghourdf=weekdaydf[~weekdaydf.convid.isin(workinghourdf.convid)]
+    
+    dftoprocess=[inputdf,workinghourdf,afterworkinghourdf,weekenddf]
+    dfnametoprocess=['Overall','Weekday During Office Hours','Weekday After Office Hours','Weekend']
+    
+    #poor implementation. need to fix!
+    responsebinlist=[1,2,3,4,5]
+    resolvebinlist=[1,2,3,4,12,24,25]
+    responsecolumnlabels=['0-1','1-2','2-3','3-4','>4']
+    resolvecolumnlabels=['0-1','1-2', '2-3','3-4','4-12','12-24','>24','UN']
+    
     
     # Create a Pandas Excel writer using XlsxWriter as the engine.
     writer = pd.ExcelWriter(ofilename, engine='xlsxwriter')
@@ -1441,12 +1470,14 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
     
     for idx,df in enumerate(dftoprocess):                
         try:
-            sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(df,'s_response_bin',timeinterval)
-            sliceddf_resp2, responsepivotdf2,numconversations2=generatetagpivtbl(df,'s_response_bin',prevtimeinterval)
-            sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(df,'s_resolve_bin',timeinterval)  
+            sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(df,'s_response_bin',timeinterval,responsebinlist)
+            sliceddf_resp2, responsepivotdf2,numconversations2=generatetagpivtbl(df,'s_response_bin',prevtimeinterval,responsebinlist)
+            sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(df,'s_resolve_bin',timeinterval,resolvebinlist)  
             tagpivotdf,responsestats,numconversations=generatetagpivdf(df,'created_at_Date',timeinterval)
         except ValueError:
             continue
+        
+        
         #modify the results to look like AGP. possibly want to shift it to within function?
         totalconvthisweek=responsepivotdf['Total'][-1]
         uniquedresp=len(sliceddf_resp.convid.unique())    
@@ -1454,9 +1485,6 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
         uniquedresp2=len(sliceddf_resp2.convid.unique())
         responsepivotdf['%']=responsepivotdf['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
         
-        #try:
-        #    within4hours=float(responsepivotdf['Total'][-1]-responsepivotdf[5][-1])/totalconvthisweek*100
-            
         within4hours=[]
         for i in xrange(4): 
             try:
@@ -1475,23 +1503,22 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
                        
         uniquedunresolved=len(sliceddf_resolv[sliceddf_resolv['s_resolve_bin']==0].convid.unique())
         
-        #rename so that column labels make sense
+        #try:
+        #    within4hours=float(responsepivotdf['Total'][-1]-responsepivotdf[5][-1])/totalconvthisweek*100
+        
+        #rename so that column labels make sense 
         responsepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',5:'>4','Total':'Grand Total',0:'UN'}, inplace=True)
         cols=resolvepivotdf.columns.tolist()
         if cols[0]==0: #handle when there are unresolved conversations
             cols=cols[1:-1]+[cols[0]]+[cols[-1]]
             resolvepivotdf=resolvepivotdf[cols]
-                
-        resolvepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',10:'4-10',24:'>24',0:'UN','Total':'Grand Total'}, inplace=True)
+        
+        ###naming dependent on code outside of function###[1,2,3,4,12,24,25]
+        resolvepivotdf.rename(columns={1: '0-1', 2: '1-2', 3:'2-3',4:'3-4',12:'4-12',24:'12-24',25:'>24',0:'UN','Total':'Grand Total'}, inplace=True)
         
         #Write to sheets
-        # Convert the dataframe to an XlsxWriter Excel object.
-        if idx==0:
-            sheetname='Overall'
-        elif idx==1:
-            sheetname='During Office Hours'
-        elif idx==2:
-            sheetname='After Office Hours'
+        # Convert the dataframe to an XlsxWriter Excel object.        
+        sheetname=dfnametoprocess[idx]
             
         responserow=5
         responsepivotdf.to_excel(writer, sheet_name=sheetname,startrow=responserow)
@@ -1531,6 +1558,73 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
                                         'value':    0,
                                         'format':   format1})
         
+        #generate piechart
+        response_pie=responsepivotdf.iloc[-1][:-2]        
+        resolve_pie=resolvepivotdf.iloc[-1][:-1]
+        
+        data=[  dict(labels=responsecolumnlabels,#response_pie.keys(),
+                   values=response_pie.tolist(),#response_pie.values(),
+                   name='Response',
+                   hoverinfo='label+percent+name',
+                   type='pie',
+                   hole=0.4,
+                   sort=False,
+                   domain={'x': [0, .48],
+                       'y': [0, 1]},
+                   marker={'colors': ['rgb(0, 255, 0)',
+                                      'rgb(60, 225, 60)',
+                                      'rgb(90, 200, 90)',
+                                      'rgb(120, 175, 120)',
+                                      'rgb(255, 175, 0)']}
+                                             ),
+                dict(labels=resolvecolumnlabels,#resolve_pie.keys(),
+                   values=resolve_pie.tolist(),#resolve_pie.values(),
+                   name='Resolve',
+                   hoverinfo='label+percent+name',
+                   type='pie',
+                   hole=0.4,
+                   sort=False,
+                   domain={'x': [.52, 1],
+                       'y': [0, 1]},
+                   marker={'colors': ['rgb(0, 255, 0)',#0-1
+                              'rgb(60, 225, 60)',#1-2
+                              'rgb(90, 200, 90)',#2-3
+                              'rgb(120, 175, 120)',#3-4
+                              'rgb(140,165,140)',#4-12
+                              'rgb(170,170,170)',#12-24
+                              'rgb(255,175,0)',#>24
+                              'rgb(255,0,0)'#un
+                                  ]}
+                                             )        
+                ]
+        
+        layout=dict(   title='Weekly Email Distribution',
+                       showlegend= False,
+                       annotations=[
+                                    {
+                                        "font": {
+                                            "size": 20
+                                        },
+                                        "showarrow": False,
+                                        "text": "Response",
+                                        "x": 0.20,
+                                        "y": 0.5
+                                    },
+                                    {
+                                        "font": {
+                                            "size": 20
+                                        },
+                                        "showarrow": False,
+                                        "text": "Resolve",
+                                        "x": 0.795,
+                                        "y": 0.5
+                                    }
+                                ]                       
+                        )
+                        
+        fig=dict(data=data, layout=layout)
+        plot(fig,filename=ofilename[:-5]+'_'+sheetname+'_pie.html',auto_open=False)        
+    
     # Close the Pandas Excel writer and output the Excel file.
     #workbook.close()    
     writer.save()
@@ -1563,7 +1657,9 @@ topconvdfcopy['created_at_EOD']=topconvdfcopy.created_at_Date.apply(lambda s: s+
 topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
 #change none to string so that can group
 topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
-
+topconvdfcopy.adminname=topconvdfcopy.adminname.apply(lambda s: changenonetostr(s,'Unassigned'))
+topconvdfcopy.adminname.fillna('Unassigned',inplace=True)
+    
 issueschoolexpandeddf=expandtag(expandtag(topconvdfcopy,'issue'),'school')
 
 Alloutdisable=False
