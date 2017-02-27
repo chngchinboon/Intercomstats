@@ -1645,22 +1645,24 @@ timeframeenddt=[timenow.date()-datetime.timedelta(dt) for dt in timeframeend]
 #timeinterval=[timeframestartdt[0],timeframeenddt[0]]
 #ofilename='test'                
 
-#need to convert utc time to local
-for item in datetimeattrlist:               
-    if hasattr(topconvdfcopy, item): topconvdfcopy[item] = topconvdfcopy[item]+pd.Timedelta('8 hours')
-
-#resplit to update
-splitdatetime(topconvdfcopy,['created_at'])
-topconvdfcopy['created_at_EOD']=topconvdfcopy.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
-             
 #change none to string so that can group
 topconvdfcopy['issue']=topconvdfcopy.issue.apply(lambda s: changenonetostr(s))
-#change none to string so that can group
 topconvdfcopy['school']=topconvdfcopy.school.apply(lambda s: changenonetostr(s))
 topconvdfcopy.adminname=topconvdfcopy.adminname.apply(lambda s: changenonetostr(s,'Unassigned'))
 topconvdfcopy.adminname.fillna('Unassigned',inplace=True)
-    
-issueschoolexpandeddf=expandtag(expandtag(topconvdfcopy,'issue'),'school')
+
+#make copy for processing
+topconvdfcopyutc=topconvdfcopy.copy()
+
+#need to convert utc time to local
+for item in datetimeattrlist:               
+    if hasattr(topconvdfcopyutc, item): topconvdfcopyutc[item] = topconvdfcopyutc[item]+pd.Timedelta('8 hours')
+
+#resplit to update
+splitdatetime(topconvdfcopyutc,['created_at'])
+topconvdfcopyutc['created_at_EOD']=topconvdfcopyutc.created_at_Date.apply(lambda s: s+pd.Timedelta('1 days')+pd.Timedelta('-1us'))
+                 
+issueschoolexpandeddf=expandtag(expandtag(topconvdfcopyutc,'issue'),'school')
 
 Alloutdisable=False
 
@@ -1679,10 +1681,10 @@ for idx,country in enumerate(countrylist):
     #split by country
     if idx==0:
         tempexpanded=issueschoolexpandeddf[(issueschoolexpandeddf.adminname.isin(admindfbycountry[idx].name))|(issueschoolexpandeddf.adminname.isnull())] 
-        temptopconvdfcopy=topconvdfcopy[(topconvdfcopy.adminname.isin(admindfbycountry[idx].name))|(topconvdfcopy.adminname.isnull())] 
+        temptopconvdfcopy=topconvdfcopyutc[(topconvdfcopyutc.adminname.isin(admindfbycountry[idx].name))|(topconvdfcopyutc.adminname.isnull())] 
     else:
         tempexpanded=issueschoolexpandeddf[(issueschoolexpandeddf.adminname.isin(admindfbycountry[idx].name))]                                            
-        temptopconvdfcopy=topconvdfcopy[(topconvdfcopy.adminname.isin(admindfbycountry[idx].name))]                                            
+        temptopconvdfcopy=topconvdfcopyutc[(topconvdfcopyutc.adminname.isin(admindfbycountry[idx].name))]                                            
     
     subfolderpath=os.path.abspath(os.path.join(outputfolder,foldername,country))     
     
@@ -1746,7 +1748,7 @@ for idx,country in enumerate(countrylist):
 #     stat['stats']
 if toplot:
     #keep copy for printing 
-    groupedbyadminname = topconvdfcopy.copy().groupby('adminname')    
+    groupedbyadminname = topconvdfcopyutc.copy().groupby('adminname')    
     for i, item in groupedbyadminname:
         toprint=groupedbyadminname.get_group(i).sort_values('created_at',ascending=True)
         toprint['s_to_first_response']=toprint.s_to_last_closed.apply(lambda s: changenonetotimedeltazero(s))
