@@ -639,7 +639,7 @@ if rebuild[1]:
          responsecolumnlabels=['0-1','1-2','2-3','3-4','>4','UN']
          resolvecolumnlabels=['0-1','1-2', '2-3','3-4','4-12','12-24','>24','UN']
                            
-         toaugment['s_response_bin']=pd.cut(toaugment.s_to_first_response.dt.total_seconds(),[i*3600 for i in responsebinlist],labels=responsecolumnlabels).cat.add_categories(responsecolumnlabels[-1]).fillna(responsecolumnlabels[-1])
+         toaugment['s_response_bin']=pd.cut(toaugment.s_to_first_response.dt.total_seconds(),[i*3600 for i in responsebinlist],labels=responsecolumnlabels[:-1]).cat.add_categories(responsecolumnlabels[-1]).fillna(responsecolumnlabels[-1])
                   
          #can't print if type is replaced with str None
          #Have to fill nattype with none first #this screws with plotly.
@@ -780,7 +780,7 @@ for idx,country in enumerate(countrylist):
     
     outputstats=True
     if outputstats & ~Alloutdisable:
-        pltf.agpgen(tempexpanded, [timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]],os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx')))
+        pltf.agpgen(tempexpanded, [timeframestartdt[0],timeframeenddt[0]],[timeframestartdt[1],timeframeenddt[1]],os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx')),responsecolumnlabels,resolvecolumnlabels)
     
     plotallconvobyadmin=True
     if plotallconvobyadmin & ~Alloutdisable:        

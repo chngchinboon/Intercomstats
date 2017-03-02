@@ -78,7 +78,8 @@ def generatetagpivtbl(inputdf,columnname, timeinterval,forcecolumns=None):
         for colname in forcecolumns:
             if colname not in pivtable.columns.values:
                 pivtable[colname]=0
-        pivtable.sort_index(axis=1,inplace=True)
+        #pivtable.sort_index(axis=1,inplace=True)
+        pivtable=pivtable[forcecolumns+['Total']]
                                 
     return sliceddf, pivtable, numconversations
     
@@ -563,7 +564,16 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
         plot(fig,filename=ofilename+'byadmin.html',auto_open=False)
 
 #%% AGP generation
-def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
+def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels,resolvecolumnlabels):
+    #troublshooting
+    '''
+    inputdf=tempexpanded.copy()
+    timeinterval=[timeframestartdt[0],timeframeenddt[0]]
+    prevtimeinterval=[timeframestartdt[1],timeframeenddt[1]]
+    ofilename=os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx'))    
+    from plotfunc import *
+    df=dftoprocess[0]
+    '''
     #split weekday from weekend
     weekdaynumdf=inputdf.created_at_Date.apply(lambda s: s.weekday())
     weekdaydf=inputdf[weekdaynumdf<5]
@@ -579,8 +589,8 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
     #poor implementation. need to fix!
     #responsebinlist=[1,2,3,4,5]
     #resolvebinlist=[1,2,3,4,12,24,25]
-    responsecolumnlabels=['0-1','1-2','2-3','3-4','>4']
-    resolvecolumnlabels=['0-1','1-2', '2-3','3-4','4-12','12-24','>24','UN']
+    #responsecolumnlabels=['0-1','1-2','2-3','3-4','>4']
+    #resolvecolumnlabels=['0-1','1-2', '2-3','3-4','4-12','12-24','>24','UN']
     
     
     # Create a Pandas Excel writer using XlsxWriter as the engine.
@@ -613,22 +623,22 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
         responsepivotdf['%']=responsepivotdf['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
         
         within4hours=[]
-        for i in xrange(4): 
+        for i in responsecolumnlabels[0:4]: 
             try:
-                within4hours.append(responsepivotdf[i+1].ix['Total'])
+                within4hours.append(responsepivotdf[i].ix['Grand Total'])
             except KeyError:
-                print('Missing response timebin: ' + str(i+1))
+                print('Missing response timebin: ' + str(i))
                 pass
         within4hours=float(sum(within4hours))/totalconvthisweek*100
         #except KeyError:
         #    within4hours=None
         try:
-             unresolvedthisweek=resolvepivotdf[0]['Total']
+             unresolvedthisweek=resolvepivotdf[resolvecolumnlabels[-1]]['Grand Total']
         except KeyError:
              unresolvedthisweek=0
              print ('No unresolved found')
                        
-        uniquedunresolved=len(sliceddf_resolv[sliceddf_resolv['s_resolve_bin']==0].convid.unique())
+        uniquedunresolved=len(sliceddf_resolv[sliceddf_resolv['s_resolve_bin']=='UN'].convid.unique())
         
         #try:
         #    within4hours=float(responsepivotdf['Total'][-1]-responsepivotdf[5][-1])/totalconvthisweek*100
@@ -756,7 +766,7 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename):
     #workbook.close()    
     writer.save()
 
-#%% generate stats for each admin
+#%% generate stats for each admin <need fix too many previous changes> 
 def genstatadmin(inputdf,ofilefolder,silent=True):
 #keep copy for printing 
     groupedbyadminname = inputdf.groupby('adminname')    
