@@ -12,6 +12,9 @@ import augfunc as af
 
 from plotly.offline import download_plotlyjs, plot
 from plotly.graph_objs import Bar, Layout, Scatter 
+
+#https://www.littlelives.com/img/identity/logo_littlelives_full_med.png
+
 #%% General functions
 def slicebytimeinterval(df,timeinterval,column='created_at_Date'):
     if timeinterval[0]>timeinterval[1]:
@@ -48,11 +51,11 @@ def expandtag(df,tagtype): #need to double check to see if truly duplicating pro
     return expandeddf
 
 def recogtf(tf,timebin):#for printing timeframe in context
-    timeframe=[7,30,180,365]
+    timeframe=[7,30,180,365]#in days
     tfstr=['Week','Month','6 Months','Year']    
     binout=af.bintime(pd.Timedelta(tf),'D',timebin,0)
     binoutidx=[i for i,x in enumerate(timeframe) if x==binout]    
-    return tfstr[binoutidx[0]]
+    return tfstr[binoutidx[0]],timeframe[binoutidx[0]]
 
       
     
@@ -183,7 +186,7 @@ def overallresponsestatplot(rawinputdf,timeinterval,ofilename,silent=False):
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
-    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
     
     responsestats=slicebytimeinterval(rawinputdf,timeinterval).copy()#overallconvdf
     responsestats=responsestats.sort_values('created_at',ascending=True)
@@ -262,7 +265,7 @@ def openconvobytfplot(rawinputdf,timeinterval,ofilename,silent=False):
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
-    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
     
     pivtable=generateopentagpivdf(rawinputdf, timeinterval)
         
@@ -303,7 +306,7 @@ def tagsbytfplot(inputdf,timeinterval,ofilename,silent=False):    #y-axis:time, 
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
-    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
 
     pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
 
@@ -350,7 +353,7 @@ def overalltagplot(inputdf,timeinterval,ofilename,silent=False):#x-axis tags, y-
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
-    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
 
     pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
 
@@ -382,7 +385,7 @@ def overalltagplot2(inputdf,timeintervallist,ofilename,silent=False):#dual timef
         tfstart=timeinterval[0]
         tfend=timeinterval[1]
         tfdelta=tfend-tfstart
-        plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+        plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
 
         pivtable,responsestats,numconversations=generatetagpivdf(inputdf,'created_at_Date',timeinterval)
                 
@@ -414,7 +417,7 @@ def allconvobyadminplot(inputdf,timeinterval,ofilename,silent=False): #need to c
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
-    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
     
     pivtable, responsestats, numconversations=generatetagpivdf(inputdf,'adminname',timeinterval)
     
@@ -473,7 +476,7 @@ def tagsbyschoolplot(inputdf,timeinterval,ofilename,silent=False):
     pivtable=workindf.pivot_table(index='issue', columns='school', aggfunc=len, fill_value=0)
     #pivtable=inputpivtable[3].copy()       #groupbyschool     
     
-    plottf=recogtf(tfdelta,range(tfdelta.days+1))    
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1))    
     n=len(sliceddf.convid.unique())   
     day_piv=pivtable    
         
@@ -497,7 +500,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
     tfdelta=tfend-tfstart
-    plottf=recogtf(tfdelta,range(tfdelta.days+1)) 
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
     #in case not assigned yet, adminname will be empty
     #inputdf.adminname=inputdf.adminname.apply(lambda s: changenonetostr(s,'Unassigned'))
     #inputdf.adminname.fillna('Unassigned',inplace=True)
@@ -564,16 +567,25 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
         plot(fig,filename=ofilename+'byadmin.html',auto_open=False)
 
 #%% AGP generation
-def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels,resolvecolumnlabels):
+def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlabels):
     #troublshooting
     '''
     inputdf=tempexpanded.copy()
     timeinterval=[timeframestartdt[0],timeframeenddt[0]]
-    prevtimeinterval=[timeframestartdt[1],timeframeenddt[1]]
+    #prevtimeinterval=[timeframestartdt[1],timeframeenddt[1]]
     ofilename=os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx'))    
     from plotfunc import *
     df=dftoprocess[0]
+    idx=0
     '''
+    tfstart=timeinterval[0]
+    tfend=timeinterval[1]
+    tfdelta=tfend-tfstart
+    plottf,plottfn=recogtf(tfdelta,range(tfdelta.days+1)) 
+    #generate list for initial timeframe and previous 4 timeframes
+    tfdeltalist=[(plottfn+1)*i for i in [i for i in range(5)]]
+    tflist=[[tf- pd.Timedelta(str(td)+" days") for tf in timeinterval] for td in tfdeltalist]
+        
     #split weekday from weekend
     weekdaynumdf=inputdf.created_at_Date.apply(lambda s: s.weekday())
     weekdaydf=inputdf[weekdaynumdf<5]
@@ -605,27 +617,37 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
                                                 #'fg_color': '#D7E4BC',
                                             })    
     
-    for idx,df in enumerate(dftoprocess):                
-        try:
-            sliceddf_resp, responsepivotdf,numconversations=generatetagpivtbl(df,'s_response_bin',timeinterval,responsecolumnlabels)
-            sliceddf_resp2, responsepivotdf2,numconversations2=generatetagpivtbl(df,'s_response_bin',prevtimeinterval,responsecolumnlabels)
-            sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(df,'s_resolve_bin',timeinterval,resolvecolumnlabels)  
-            tagpivotdf,responsestats,numconversations=generatetagpivdf(df,'created_at_Date',timeinterval)
+    for idx,df in enumerate(dftoprocess):
+        tosplit=((idx==0)|(idx==1))        
+        if tosplit:
+            responsetoprocess=[0,1,2,3,4]
+        else:
+            responsetoprocess=[0,1]
+        
+        responsepivotdf=[[]for i in xrange(len(responsetoprocess))]
+        sliceddf_resp=[[]for i in xrange(len(responsetoprocess))]
+                
+        try:                        
+            for tfidx in responsetoprocess:
+                sliceddf_resp[tfidx], responsepivotdf[tfidx],numconversations=generatetagpivtbl(df,'s_response_bin',tflist[tfidx],responsecolumnlabels)            
+            
+            sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(df,'s_resolve_bin',tflist[0],resolvecolumnlabels)  
+            tagpivotdf,responsestats,numconversations=generatetagpivdf(df,'created_at_Date',tflist[0])
         except ValueError:
             continue
         
         
         #modify the results to look like AGP. possibly want to shift it to within function?
-        totalconvthisweek=responsepivotdf['Total'][-1]
-        uniquedresp=len(sliceddf_resp.convid.unique())    
-        totalconvpreviousweek=responsepivotdf2['Total'][-1]
-        uniquedresp2=len(sliceddf_resp2.convid.unique())
-        responsepivotdf['%']=responsepivotdf['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
+        totalconvthisweek=responsepivotdf[0]['Total'][-1]
+        uniquedresp=len(sliceddf_resp[0].convid.unique())    
+        totalconvpreviousweek=responsepivotdf[1]['Total'][-1]
+        uniquedresp2=len(sliceddf_resp[1].convid.unique())
+        responsepivotdf[0]['%']=responsepivotdf[0]['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
         
         within4hours=[]
         for i in responsecolumnlabels[0:4]: 
             try:
-                within4hours.append(responsepivotdf[i].ix['Grand Total'])
+                within4hours.append(responsepivotdf[0][i].ix['Grand Total'])
             except KeyError:
                 print('Missing response timebin: ' + str(i))
                 pass
@@ -658,7 +680,7 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
         sheetname=dfnametoprocess[idx]
             
         responserow=5
-        responsepivotdf.to_excel(writer, sheet_name=sheetname,startrow=responserow)
+        responsepivotdf[0].to_excel(writer, sheet_name=sheetname,startrow=responserow)
                  
         worksheet = workbook.sheetnames[sheetname]
         worksheet.write_string(0, 0,'Weekly Email Support Summary')
@@ -668,11 +690,11 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
         worksheet.merge_range(responserow-1,1,responserow-1,7, 'No. of hours taken to Respond',merge_format)
         worksheet.write_string(responserow-1, 0,'Category')
         if within4hours:
-            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
+            worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
         else:
-            worksheet.write_string(responserow+len(responsepivotdf)+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
+            worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
             
-        summaryrow=responserow+len(responsepivotdf)+3
+        summaryrow=responserow+len(responsepivotdf[0])+3
         worksheet.write_string(summaryrow, 0,'Summary:')
         worksheet.write_string(summaryrow+1, 0,'1) Total of ' + str(totalconvthisweek) + ' ('+ str(uniquedresp) +' conversations) email support cases. (Prev week: ' + str(totalconvpreviousweek) + ' ('+ str(uniquedresp2) +' conversations))')
         worksheet.write_string(summaryrow+2, 0,'2) Unresolved emails: ' + str(unresolvedthisweek)+' ('+str(uniquedunresolved)+' conversations)') 
@@ -686,7 +708,7 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
         resolvepivotdf.to_excel(writer, sheet_name=sheetname,startrow=resolverow)
         tagpivotdf.to_excel(writer, sheet_name=sheetname,startrow=resolverow+len(resolvepivotdf)+20)
         format1=workbook.add_format({'font_color': 'white'})
-        worksheet.conditional_format(responserow+1,1,responserow+len(responsepivotdf),len(responsepivotdf.columns), {'type':     'cell',
+        worksheet.conditional_format(responserow+1,1,responserow+len(responsepivotdf[0]),len(responsepivotdf[0].columns), {'type':     'cell',
                                         'criteria': '=',
                                         'value':    0,
                                         'format':   format1})
@@ -696,8 +718,8 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
                                         'format':   format1})
         
         #generate piechart
-        response_pie=responsepivotdf.iloc[-1][:-2]        
-        resolve_pie=resolvepivotdf.iloc[-1][:-1]
+        response_pie=responsepivotdf[0].iloc[-1][:-2]        
+        resolve_pie=resolvepivotdf.iloc[-1][:-1]                
         
         data=[  dict(labels=responsecolumnlabels,#response_pie.keys(),
                    values=response_pie.tolist(),#response_pie.values(),
@@ -706,13 +728,12 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
                    type='pie',
                    hole=0.4,
                    sort=False,
-                   domain={'x': [0, .48],
-                       'y': [0, 1]},
-                   marker={'colors': ['rgb(0, 255, 0)',
-                                      'rgb(60, 225, 60)',
-                                      'rgb(90, 200, 90)',
-                                      'rgb(120, 175, 120)',
-                                      'rgb(255, 175, 0)']}
+                   domain={'x': [0, .48], 'y': [tosplit*0.3, 1]},
+                   marker={'colors': ['rgb(0, 255, 0)',#0-1
+                                      'rgb(60, 225, 60)',#1-2
+                                      'rgb(90, 200, 90)',#2-3
+                                      'rgb(120, 175, 120)',#3-4
+                                      'rgb(255, 175, 0)']}#4-5
                                              ),
                 dict(labels=resolvecolumnlabels,#resolve_pie.keys(),
                    values=resolve_pie.tolist(),#resolve_pie.values(),
@@ -721,8 +742,7 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
                    type='pie',
                    hole=0.4,
                    sort=False,
-                   domain={'x': [.52, 1],
-                       'y': [0, 1]},
+                   domain={'x': [.52, 1], 'y': [tosplit*0.3, 1]},
                    marker={'colors': ['rgb(0, 255, 0)',#0-1
                               'rgb(60, 225, 60)',#1-2
                               'rgb(90, 200, 90)',#2-3
@@ -735,28 +755,78 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
                                              )        
                 ]
         
-        layout=dict(   title='Weekly Email Distribution',
+        annotations=[
+                        {
+                            "font": {
+                                "size": 20
+                            },
+                            "showarrow": False,
+                            "text": "Response<br>"+"{:.2f}".format(within4hours)+"%<4h",
+                            "x": 0.190,
+                            "y": tosplit*0.3+(1-tosplit*0.3)/2
+                        },
+                        {
+                            "font": {
+                                "size": 20
+                            },
+                            "showarrow": False,
+                            "text": "Resolve",
+                            "x": 0.795,
+                            "y": tosplit*0.3+(1-tosplit*0.3)/2
+                        }
+                                ] 
+    
+        prev4label=['Last '+plottf,'Two '+plottf+'s ago','Three '+plottf+'s ago','Four '+plottf+'s ago']
+        if tosplit:
+            for i in xrange(4):
+                response_pie=responsepivotdf[i+1].iloc[-1][:-2] 
+                prev4tf=  dict(labels=responsecolumnlabels,#response_pie.keys(),
+                       values=response_pie.tolist(),#response_pie.values(),
+                       name='Response',
+                       hoverinfo='label+percent+name',
+                       type='pie',
+                       hole=0.4,
+                       sort=False,
+                       domain={'x': [0.25*i, 0.25*(i+1)],
+                           'y': [0, 0.2]},
+                       marker={'colors': ['rgb(0, 255, 0)',
+                                          'rgb(60, 225, 60)',
+                                          'rgb(90, 200, 90)',
+                                          'rgb(120, 175, 120)',
+                                          'rgb(255, 175, 0)']}
+                                                 )                          
+                data.append(prev4tf)
+                prev4anno={
+                            "font": {
+                                "size": 15
+                            },
+                            "showarrow": False,
+                            "text": prev4label[i],
+                            "xref":"paper",
+                            "yref":"paper",
+                            "x": 0.25*(i)+(0.25/2),
+                            "y": 0.25,
+                            "xanchor":"center"                                                    
+                                 }
+                annotations.append(prev4anno)
+            prev4title={
+                        "font": {
+                            "size": 15
+                        },
+                        "showarrow": False,
+                        "text": 'Response:',
+                        "xref":"paper",
+                        "yref":"paper",
+                        "x": 0,
+                        "y": 0.25,
+                        "xanchor":"left"                                                    
+                             }
+            annotations.append(prev4title)
+                                
+        
+        layout=dict(   title='Weekly Email Distribution - ' + dfnametoprocess[idx],
                        showlegend= False,
-                       annotations=[
-                                    {
-                                        "font": {
-                                            "size": 20
-                                        },
-                                        "showarrow": False,
-                                        "text": "Response",
-                                        "x": 0.20,
-                                        "y": 0.5
-                                    },
-                                    {
-                                        "font": {
-                                            "size": 20
-                                        },
-                                        "showarrow": False,
-                                        "text": "Resolve",
-                                        "x": 0.795,
-                                        "y": 0.5
-                                    }
-                                ]                       
+                       annotations=annotations                     
                         )
                         
         fig=dict(data=data, layout=layout)
@@ -767,6 +837,29 @@ def agpgen(inputdf, timeinterval,prevtimeinterval,ofilename,responsecolumnlabels
     writer.save()
 
 #%% generate stats for each admin <need fix too many previous changes> 
+'''
+To do list
+Weekly stats
+Monthly stats
+
+Stats:
+Overall Response time (O)
+Weekday Response time - during office hours (WDDOH)
+Weekday Response time - after office hours (WDAOH)
+Weekend Response time (WE)
+Overall Resolve time <-- issue dependent
+Weekday Resolve time - during office hours
+Weekday Resolve time - after office hours
+Weekend Resolve time
+Total number of closed conversations (CC)
+Total number of open conversations EOD (OC)
+
+#Graphs
+Lifetime Processed conversations - (created_at, first_response, last_closed) vs time (continuous)
+Average Response/resolve time Bar chart - O,WDDOH,WDAOH,WE,CC,OC vs time (Weekly)
+Average Response/resolve time Bar chart - O,WDDOH,WDAOH,WE,CC,OC vs time (Monthly)
+'''
+
 def genstatadmin(inputdf,ofilefolder,silent=True):
 #keep copy for printing 
     groupedbyadminname = inputdf.groupby('adminname')    
