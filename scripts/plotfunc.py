@@ -11,7 +11,7 @@ import augfunc as af
 #import xlsxwriter
 
 from plotly.offline import download_plotlyjs, plot
-from plotly.graph_objs import Bar, Layout, Scatter 
+from plotly.graph_objs import Bar, Layout, Scatter, Pie 
 
 #https://www.littlelives.com/img/identity/logo_littlelives_full_med.png
 
@@ -567,6 +567,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
         plot(fig,filename=ofilename+'byadmin.html',auto_open=False)
 
 #%% AGP generation
+#change 4 donuts prev to line/bar chart with <4 and >4 only
 def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlabels):
     #troublshooting
     '''
@@ -626,32 +627,27 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
         
         responsepivotdf=[[]for i in xrange(len(responsetoprocess))]
         sliceddf_resp=[[]for i in xrange(len(responsetoprocess))]
-                
+        uniqueconv_resp=[[]for i in xrange(len(responsetoprocess))]
+        within4hours_resp=[[]for i in xrange(len(responsetoprocess))]
+        over4hours_resp=[[]for i in xrange(len(responsetoprocess))]
+                        
         try:                        
             for tfidx in responsetoprocess:
-                sliceddf_resp[tfidx], responsepivotdf[tfidx],numconversations=generatetagpivtbl(df,'s_response_bin',tflist[tfidx],responsecolumnlabels)            
+                sliceddf_resp[tfidx], responsepivotdf[tfidx],uniqueconv_resp[tfidx]=generatetagpivtbl(df,'s_response_bin',tflist[tfidx],responsecolumnlabels)            
+                within4hours_resp[tfidx]=responsepivotdf[tfidx].iloc[-1][0:4].sum()#if timebins change this will go haywire!!!!!!!!
+                over4hours_resp[tfidx]=responsepivotdf[tfidx].iloc[-1][4:-1].sum()#if timebins change this will go haywire!!!!!!!!
+                
+                if tfidx==0:
+                    responsepivotdf[tfidx]['%']=responsepivotdf[tfidx]['Total'].apply(lambda s: float(s)/responsepivotdf[tfidx]['Total'][-1]*100)#get percentage of total for printing
             
-            sliceddf_resolv, resolvepivotdf,numconversations=generatetagpivtbl(df,'s_resolve_bin',tflist[0],resolvecolumnlabels)  
-            tagpivotdf,responsestats,numconversations=generatetagpivdf(df,'created_at_Date',tflist[0])
+            sliceddf_resolv, resolvepivotdf,uniqueconv_resolv=generatetagpivtbl(df,'s_resolve_bin',tflist[0],resolvecolumnlabels)  
+            tagpivotdf,responsestats,allconvnum=generatetagpivdf(df,'created_at_Date',tflist[0])
         except ValueError:
             continue
         
         
         #modify the results to look like AGP. possibly want to shift it to within function?
-        totalconvthisweek=responsepivotdf[0]['Total'][-1]
-        uniquedresp=len(sliceddf_resp[0].convid.unique())    
-        totalconvpreviousweek=responsepivotdf[1]['Total'][-1]
-        uniquedresp2=len(sliceddf_resp[1].convid.unique())
-        responsepivotdf[0]['%']=responsepivotdf[0]['Total'].apply(lambda s: float(s)/totalconvthisweek*100)#get percentage of total
-        
-        within4hours=[]
-        for i in responsecolumnlabels[0:4]: 
-            try:
-                within4hours.append(responsepivotdf[0][i].ix['Grand Total'])
-            except KeyError:
-                print('Missing response timebin: ' + str(i))
-                pass
-        within4hours=float(sum(within4hours))/totalconvthisweek*100
+
         #except KeyError:
         #    within4hours=None
         try:
@@ -689,14 +685,16 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
         #merge_range(first_row, first_col, last_row, last_col, data[, cell_format])
         worksheet.merge_range(responserow-1,1,responserow-1,7, 'No. of hours taken to Respond',merge_format)
         worksheet.write_string(responserow-1, 0,'Category')
+        within4hours=float(within4hours_resp[0])/responsepivotdf[0]['Total'][-1]*100
         if within4hours:
             worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
         else:
+            within4hours=0.00
             worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
             
         summaryrow=responserow+len(responsepivotdf[0])+3
         worksheet.write_string(summaryrow, 0,'Summary:')
-        worksheet.write_string(summaryrow+1, 0,'1) Total of ' + str(totalconvthisweek) + ' ('+ str(uniquedresp) +' conversations) email support cases. (Prev week: ' + str(totalconvpreviousweek) + ' ('+ str(uniquedresp2) +' conversations))')
+        worksheet.write_string(summaryrow+1, 0,'1) Total of ' + str(responsepivotdf[0]['Total'][-1]) + ' ('+ str(uniqueconv_resp[0]) +' conversations) email support cases. (Prev week: ' + str(responsepivotdf[1]['Total'][-1]) + ' ('+ str(uniqueconv_resp[1]) +' conversations))')
         worksheet.write_string(summaryrow+2, 0,'2) Unresolved emails: ' + str(unresolvedthisweek)+' ('+str(uniquedunresolved)+' conversations)') 
                 
         worksheet.write_string(summaryrow+6, 0,'Email Resolve')
@@ -721,7 +719,7 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
         response_pie=responsepivotdf[0].iloc[-1][:-2]        
         resolve_pie=resolvepivotdf.iloc[-1][:-1]                
         
-        data=[  dict(labels=responsecolumnlabels,#response_pie.keys(),
+        data=[  Pie(labels=responsecolumnlabels,#response_pie.keys(),
                    values=response_pie.tolist(),#response_pie.values(),
                    name='Response',
                    hoverinfo='label+percent+name',
@@ -735,7 +733,7 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
                                       'rgb(120, 175, 120)',#3-4
                                       'rgb(255, 175, 0)']}#4-5
                                              ),
-                dict(labels=resolvecolumnlabels,#resolve_pie.keys(),
+                Pie(labels=resolvecolumnlabels,#resolve_pie.keys(),
                    values=resolve_pie.tolist(),#resolve_pie.values(),
                    name='Resolve',
                    hoverinfo='label+percent+name',
@@ -763,7 +761,9 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
                             "showarrow": False,
                             "text": "Response<br>"+"{:.2f}".format(within4hours)+"%<4h",
                             "x": 0.190,
-                            "y": tosplit*0.3+(1-tosplit*0.3)/2
+                            "y": tosplit*0.3+(1-tosplit*0.3)/2,
+                            "xref":'paper',
+                            "yref":'paper'                                             
                         },
                         {
                             "font": {
@@ -772,63 +772,55 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
                             "showarrow": False,
                             "text": "Resolve",
                             "x": 0.795,
-                            "y": tosplit*0.3+(1-tosplit*0.3)/2
+                            "y": tosplit*0.3+(1-tosplit*0.3)/2,
+                            "xref":'paper',
+                            "yref":'paper'
                         }
                                 ] 
-    
-        prev4label=['Last '+plottf,'Two '+plottf+'s ago','Three '+plottf+'s ago','Four '+plottf+'s ago']
-        if tosplit:
-            for i in xrange(4):
-                response_pie=responsepivotdf[i+1].iloc[-1][:-2] 
-                prev4tf=  dict(labels=responsecolumnlabels,#response_pie.keys(),
-                       values=response_pie.tolist(),#response_pie.values(),
-                       name='Response',
-                       hoverinfo='label+percent+name',
-                       type='pie',
-                       hole=0.4,
-                       sort=False,
-                       domain={'x': [0.25*i, 0.25*(i+1)],
-                           'y': [0, 0.2]},
-                       marker={'colors': ['rgb(0, 255, 0)',
-                                          'rgb(60, 225, 60)',
-                                          'rgb(90, 200, 90)',
-                                          'rgb(120, 175, 120)',
-                                          'rgb(255, 175, 0)']}
-                                                 )                          
-                data.append(prev4tf)
-                prev4anno={
-                            "font": {
-                                "size": 15
-                            },
-                            "showarrow": False,
-                            "text": prev4label[i],
-                            "xref":"paper",
-                            "yref":"paper",
-                            "x": 0.25*(i)+(0.25/2),
-                            "y": 0.25,
-                            "xanchor":"center"                                                    
-                                 }
-                annotations.append(prev4anno)
-            prev4title={
-                        "font": {
-                            "size": 15
-                        },
-                        "showarrow": False,
-                        "text": 'Response:',
-                        "xref":"paper",
-                        "yref":"paper",
-                        "x": 0,
-                        "y": 0.25,
-                        "xanchor":"left"                                                    
-                             }
-            annotations.append(prev4title)
-                                
-        
         layout=dict(   title='Weekly Email Distribution - ' + dfnametoprocess[idx],
-                       showlegend= False,
-                       annotations=annotations                     
-                        )
-                        
+                           showlegend= False,
+                           annotations=annotations                     
+                            )
+        
+        prev4label=['Last '+plottf,'Two '+plottf+'s ago','Three '+plottf+'s ago','Four '+plottf+'s ago']
+        prev4label.reverse()
+        if tosplit:
+            total_resp=[sum(x) for x in zip(within4hours_resp, over4hours_resp)]
+            percent_resp=[float(x)/y*100 for x,y in zip(within4hours_resp, total_resp)]
+            
+            within4hoursbar = Bar(x=prev4label, y=within4hours_resp, name='Within 4 hours', xaxis='x2', yaxis='y2')
+            data.append(within4hoursbar)
+            over4hoursbar = Bar(x=prev4label, y=over4hours_resp, name='Over 4 hours', xaxis='x2', yaxis='y2')
+            data.append(over4hoursbar)
+            '''
+            avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
+                                     name='Average Response time',yaxis='y2')    
+            data_piv.append(avgresponse)
+            
+            longestresponse = Scatter(x=day_piv.columns, y=max_piv/3600.0,
+                                         name='Longest Response time', yaxis='y2')    
+            data_piv.append(longestresponse)
+            '''    
+            layout['yaxis2']=dict(title='Conversations',domain=[0, 0.25], anchor='x2')
+            layout['xaxis2']=dict(title='Time',domain=[0.05, 0.95], anchor='y2')
+            layout['barmode']='relative'
+            
+            annotationsbar=[dict(x=xi,y=yi,
+                                 text="{:.2f}".format(zi)+"%<4hrs",
+                                 xanchor='center',
+                                 yanchor='bottom',                                 
+                                 showarrow=False,
+                                 ) for xi, yi, zi in zip(prev4label, total_resp,percent_resp)]
+            
+            layout['annotations']=annotations+annotationsbar
+                            
+                            #yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
+                            #                  tickfont=dict(color='rgb(148, 103, 189)'),
+                            #                  overlaying='y', side='right'
+                            #              )
+                            #annotations=[   dict(x=xi,y=yi, text=str(yi),
+                            #                xanchor='center', yanchor='bottom',
+                            #                showarrow=False) for xi, yi in zip(day_piv.columns, convocount.values)]
         fig=dict(data=data, layout=layout)
         plot(fig,filename=ofilename[:-5]+'_'+sheetname+'_pie.html',auto_open=False)        
     
@@ -853,6 +845,9 @@ Weekday Resolve time - after office hours
 Weekend Resolve time
 Total number of closed conversations (CC)
 Total number of open conversations EOD (OC)
+Issue list breakdown pie chart
+Intercom participation rating
+
 
 #Graphs
 Lifetime Processed conversations - (created_at, first_response, last_closed) vs time (continuous)
