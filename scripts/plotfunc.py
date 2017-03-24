@@ -571,13 +571,16 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
 def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlabels):
     #troublshooting
     '''
+    idx=0
+    tempexpanded=issueschoolexpandeddf[(issueschoolexpandeddf.adminname.isin(admindfbycountry[idx].name))|(issueschoolexpandeddf.adminname.isnull())] 
+    temptopconvdfcopy=topconvdfcopyutc[(topconvdfcopyutc.adminname.isin(admindfbycountry[idx].name))|(topconvdfcopyutc.adminname.isnull())] 
     inputdf=tempexpanded.copy()
     timeinterval=[timeframestartdt[0],timeframeenddt[0]]
     #prevtimeinterval=[timeframestartdt[1],timeframeenddt[1]]
     ofilename=os.path.abspath(os.path.join(subfolderpath,'Weeklyemail.xlsx'))    
     from plotfunc import *
     df=dftoprocess[0]
-    idx=0
+    
     '''
     tfstart=timeinterval[0]
     tfend=timeinterval[1]
@@ -784,13 +787,17 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
         
         prev4label=['Last '+plottf,'Two '+plottf+'s ago','Three '+plottf+'s ago','Four '+plottf+'s ago']
         prev4label.reverse()
+        
+        
+        
         if tosplit:
             total_resp=[sum(x) for x in zip(within4hours_resp, over4hours_resp)]
             percent_resp=[float(x)/y*100 for x,y in zip(within4hours_resp, total_resp)]
             
-            within4hoursbar = Bar(x=prev4label, y=within4hours_resp, name='Within 4 hours', xaxis='x2', yaxis='y2')
+            #need to reverse the lists for output and skip first value
+            within4hoursbar = Bar(x=prev4label, y=within4hours_resp[:0:-1], name='Within 4 hours', xaxis='x2', yaxis='y2')
             data.append(within4hoursbar)
-            over4hoursbar = Bar(x=prev4label, y=over4hours_resp, name='Over 4 hours', xaxis='x2', yaxis='y2')
+            over4hoursbar = Bar(x=prev4label, y=over4hours_resp[:0:-1], name='Over 4 hours', xaxis='x2', yaxis='y2')
             data.append(over4hoursbar)
             '''
             avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
@@ -810,7 +817,7 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
                                  xanchor='center',
                                  yanchor='bottom',                                 
                                  showarrow=False,
-                                 ) for xi, yi, zi in zip(prev4label, total_resp,percent_resp)]
+                                 ) for xi, yi, zi in zip(prev4label, total_resp[:0:-1],percent_resp[:0:-1])]
             
             layout['annotations']=annotations+annotationsbar
                             
