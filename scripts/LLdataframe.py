@@ -51,6 +51,7 @@ from intercom.client import Client
 import time
 
 #config data
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir)))
 from configs import pat#, smalllogo, largelogo
 
 #Custom functions
@@ -58,7 +59,6 @@ import plotfunc as pltf
 import augfunc as af
 
 outputfolder=os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir, 'output'))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir)))
 timenow=datetime.datetime.now()
 timenowepoch=(timenow- datetime.datetime(1970,1,1)).total_seconds()
 
