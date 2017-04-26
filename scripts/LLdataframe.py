@@ -779,7 +779,7 @@ for idx,country in enumerate(countrylist):
     if plotopenconvobytf & ~Alloutdisable:
         pltf.openconvobytfplot(temptopconvdfcopy,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'openbyday_1W_'+country)),silent=pltsilent[idx])    
         pltf.openconvobytfplot(temptopconvdfcopy,[timeframestartdt[2],timeframeenddt[2]],os.path.abspath(os.path.join(subfolderpath,'openbyday_1M_'+country)),silent=pltsilent[idx])
-        
+        pltf.curropenconvplot(tempexpanded,os.path.abspath(os.path.join(subfolderpath,'openbyadmin_'+country)),silent=pltsilent[idx])
     plottagsbyday=True
     if plottagsbyday & ~Alloutdisable:    
         pltf.tagsbytfplot(tempexpanded,[timeframestartdt[0],timeframeenddt[0]],os.path.abspath(os.path.join(subfolderpath,'tagsbyday_1W_'+country)),silent=pltsilent[idx])

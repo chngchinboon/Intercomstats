@@ -11,7 +11,7 @@ import augfunc as af
 #import xlsxwriter
 
 from plotly.offline import download_plotlyjs, plot
-from plotly.graph_objs import Bar, Layout, Scatter, Pie 
+from plotly.graph_objs import Bar, Layout, Scatter, Pie, Marker
 
 #https://www.littlelives.com/img/identity/logo_littlelives_full_med.png
 
@@ -300,7 +300,86 @@ def openconvobytfplot(rawinputdf,timeinterval,ofilename,silent=False):
         plot(fig,filename=ofilename+'.html')
     else:
         plot(fig,filename=ofilename+'.html',auto_open=False)
-
+#%% current open conversations by admin
+#display 
+def curropenconvplot(inputdf,ofilename,silent=False):
+    #get all open conversations & skip those unassigned
+    df=inputdf[inputdf.open==1]
+        
+    #generate bar chart
+    #pivtable_bar=df.pivot_table(index=['issue'], columns=['adminname'], fill_value=0)
+    
+    pivtable_bar=df[['adminname','issue']].pivot_table(index=['issue'], columns=['adminname'], fill_value=0,aggfunc=len)
+    totalnumperadmin=pivtable_bar.sum()
+    
+    day_piv=pivtable_bar    
+    convocount=totalnumperadmin
+    data_piv=[]    
+    for idx,row in day_piv.iterrows():
+        tempdata_piv = Bar(x=day_piv.columns, y=row.values, name=idx)
+        data_piv.append(tempdata_piv)
+           
+    layout1 = Layout(title='Conversations still open (n='+str(len(df))+')',
+                    yaxis=dict(title='Conversations'),                    
+                    barmode='relative',                    
+                    xaxis=dict(title='Admin Name'),    
+                    annotations=[   dict(x=xi,y=yi, text=str(yi),
+                                    xanchor='center', yanchor='bottom',
+                                    showarrow=False) for xi, yi in zip(day_piv.columns, convocount.values)],
+                    hovermode = 'closest'
+                    )
+    
+    #scatter plots for info
+    #sort by adminname and issue for iteration
+    dfsorted=df.sort_values(['adminname','issue']).copy()
+    dfsorted=dfsorted.reset_index()
+    #pivtable_scatter=df.pivot_table(index=['adminname'], columns=['issue'], fill_value=0,values='open')
+    textlst=[]
+    prevname=''
+    issuecount=0
+    issuecountarray=[]
+    for idx,row in dfsorted.iterrows():
+        createdatstr='Created at: '+str(row.created_at)
+        if prevname==row.adminname:
+            issuecount+=1
+        else:
+            issuecount=1
+        
+        schoolstr='School: ' + str(row.school)
+        issuestr='Issues: ' + str(row.issue)
+        
+        try: 
+             usernamestr='Username: ' + str(row.username.encode('utf-8'))
+        except AttributeError:
+             usernamestr='Username: ' + str(row.username)
+        emailstr='Email: ' + str(row.email)        
+        textstr='<br>'.join([issuestr,schoolstr,usernamestr,createdatstr,emailstr])#add in conversation id in case need to track back
+        textlst.append(textstr)
+        issuecountarray.append(issuecount)
+        prevname=row.adminname
+    
+    issuecountarray = [val - 0.5 for val in issuecountarray]#shift down abit so that its not on edge
+    data = Scatter(    x= dfsorted.adminname.values, 
+                       y= issuecountarray,
+                       mode = 'markers',
+                       name='Details',
+                       text=textlst,
+                       marker=Marker(   color='white',
+                                        symbol='square'
+                                    )
+                    )    
+    data_piv.append(data)
+    
+    #plot figure
+    fig1 = dict(data=data_piv, layout=layout1 )
+    
+    if not silent:
+        plot(fig1,filename=ofilename+'.html')
+        
+    else:
+        plot(fig1,filename=ofilename+'.html',auto_open=False)
+        
+        
 #%% Tags by timeframe
 def tagsbytfplot(inputdf,timeinterval,ofilename,silent=False):    #y-axis:time, x-axis tags
     tfstart=timeinterval[0]
