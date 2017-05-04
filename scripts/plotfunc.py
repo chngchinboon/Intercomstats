@@ -193,12 +193,17 @@ def overallresponsestatplot(rawinputdf,timeinterval,ofilename,silent=False):
     #convert 'None' str into None #this is a fucking terrible bandaid. Please fix soon
     #responsestats['s_to_first_response']=responsestats.s_to_first_response.apply(lambda s: changenonetotimedeltazero(s))
     responsestats['s_to_last_closed']=responsestats.s_to_last_closed.apply(lambda s: af.changenonetotimedeltazero(s))
-    #responsestats['s_to_last_closed']=responsestats.s_to_last_closed.apply(lambda s: changenattotimedeltazero(s))
+    #responsestats['s_to_last_closed']=responsestats.s_to_last_closed.apply(lambda s: af.changenattotimedeltazero(s))
     responsestats['s_to_first_closed']=responsestats.s_to_first_closed.apply(lambda s: af.changenattotimedeltazero(s))
     responsestats['s_to_last_update']=responsestats.s_to_last_update.apply(lambda s: af.changenonetotimedeltazero(s))
     fr=responsestats['s_to_first_response'].astype('timedelta64[s]')
     fc=responsestats['s_to_first_closed'].astype('timedelta64[s]')
-    ls=responsestats['s_to_last_closed'].astype('timedelta64[s]')
+    try:
+        ls=responsestats['s_to_last_closed'].astype('timedelta64[s]')
+    except ValueError:
+        responsestats['s_to_last_closed']=responsestats.s_to_last_closed.apply(lambda s: af.changenattotimedeltazero(s))    
+        ls=responsestats['s_to_last_closed'].astype('timedelta64[s]')
+        
     lu=responsestats['s_to_last_update'].astype('timedelta64[s]')
     
     textlst=[]
