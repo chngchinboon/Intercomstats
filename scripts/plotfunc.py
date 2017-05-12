@@ -95,8 +95,10 @@ def generatetagpivdf(inputdf, columnname, timeinterval):
     #get response stats    
     tagRpivotdf=sliceddf[['s_to_first_response',columnname]]    
     tagRpivotdfdes=tagRpivotdf.groupby(columnname).describe()
-    tagRpivotdfs=tagRpivotdfdes.unstack().loc[:,(slice(None),['mean','max'])]
-    responsestats=tagRpivotdfs['s_to_first_response'].transpose()
+    #tagRpivotdfs=tagRpivotdfdes.unstack().loc[:,(slice(None),['mean','max'])]
+    #responsestats=tagRpivotdfs['s_to_first_response'].transpose()
+    tagRpivotdfs=tagRpivotdfdes.s_to_first_response.unstack()[['mean','max']]
+    responsestats=tagRpivotdfs.transpose()
         
     return pivtable, responsestats, numconversations
 
