@@ -248,6 +248,7 @@ def overallresponsestatplot(rawinputdf,timeinterval,ofilename,silent=False):
 
     layout = Layout(    title='Overall response for last ' + plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                         yaxis=dict(title='Hours',dtick=5.0),
+                        hovermode = 'closest',
                         #xaxis=dict(title='Day')
                         xaxis=dict(     rangeselector=dict(
                                         buttons=list([ dict(count=7, label='1w', step='day',stepmode='backward'),
@@ -286,7 +287,8 @@ def openconvobytfplot(rawinputdf,timeinterval,ofilename,silent=False):
            
     layout = Layout(title='Conversations still open at the end of day for past '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversations'),                    
-                    barmode='relative',                    
+                    barmode='relative',
+                    hovermode = 'closest',
                     xaxis=dict(     rangeselector=dict(
                                         buttons=list([ dict(count=7, label='1w', step='day',stepmode='backward'),
                                                        dict(count=14, label='2w', step='day',stepmode='backward'),
@@ -386,6 +388,36 @@ def curropenconvplot(inputdf,ofilename,silent=False):
     else:
         plot(fig1,filename=ofilename+'.html',auto_open=False)
         
+#%%Current open conv by issue
+def curropenconvplotbyissue(inputdf,ofilename,silent=False):
+    #get all open conversations & skip those unassigned^M
+    df=inputdf[inputdf.open==1]
+        
+    #get count of issues
+    data_grp=df[['adminname','issue']].groupby('issue').count()
+        
+    data=Bar(x=data_grp.index.values, y=data_grp.iloc[:,0].values, 
+             name='issues',
+             marker=dict(color='rgb(50, 171, 96)')
+             )        
+           
+    layout = Layout(title='Conversations still open (n='+str(len(df))+')',
+                    yaxis=dict(title='Conversations'),                    
+                    #barmode='relative',                    
+                    xaxis=dict(title='Issues'),    
+                    annotations=[   dict(x=xi,y=yi, text=str(yi),
+                                    xanchor='center', yanchor='bottom',
+                                    showarrow=False) for xi, yi in zip(data_grp.index, data_grp.iloc[:,0].values)],
+                    hovermode = 'closest'
+                    )        
+    #plot figure^M
+    fig = dict(data=[data], layout=layout )
+    
+    if not silent:
+        plot(fig,filename=ofilename+'.html')
+        
+    else:
+        plot(fig,filename=ofilename+'.html',auto_open=False)  
         
 #%% Tags by timeframe
 def tagsbytfplot(inputdf,timeinterval,ofilename,silent=False):    #y-axis:time, x-axis tags
@@ -420,6 +452,7 @@ def tagsbytfplot(inputdf,timeinterval,ofilename,silent=False):    #y-axis:time, 
                     yaxis=dict(title='Conversations'),
                     xaxis=dict(title='Date'),
                     barmode='relative',
+                    hovermode = 'closest',
                     #yaxis2=dict(title='Time (hours)',titlefont=dict(color='rgb(148, 103, 189)'),
                     #                  tickfont=dict(color='rgb(148, 103, 189)'),
                     #                  overlaying='y', side='right'
@@ -452,6 +485,7 @@ def overalltagplot(inputdf,timeinterval,ofilename,silent=False):#x-axis tags, y-
     layout = Layout(title='Total conversations (n = '+ str(numconversations) +') split by tags for the last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Number'),
                     xaxis=dict(title='Tags'),
+                    hovermode = 'closest',
                     annotations=[   dict(x=xi,y=yi, text=str(yi),
                                     xanchor='center', yanchor='bottom',
                                     showarrow=False) for xi, yi in zip(x, y)]
@@ -488,6 +522,7 @@ def overalltagplot2(inputdf,timeintervallist,ofilename,silent=False):#dual timef
     layout = Layout(title='Total conversations split by tags for past two '+ plottf + ', n = ' + opstr,
                     yaxis=dict(title='Number'),
                     xaxis=dict(title='Tags'),
+                    hovermode = 'closest',
                     barmode='group'
                     )
     fig = dict(data=datalist, layout=layout )
@@ -533,6 +568,7 @@ def allconvobyadminplot(inputdf,timeinterval,ofilename,silent=False): #need to c
                     yaxis=dict(title='Conversations'),
                     xaxis=dict(title='Admin name'),
                     barmode='relative',
+                    hovermode = 'closest',
                     #yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
                     #                  tickfont=dict(color='rgb(148, 103, 189)'),
                     #                  overlaying='y', side='right'
@@ -574,6 +610,7 @@ def tagsbyschoolplot(inputdf,timeinterval,ofilename,silent=False):
     layout = Layout(title='Conversation Tags by School (n = '+ str(n) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Tags'),
                     xaxis=dict(title='School'),
+                    hovermode = 'closest',
                     barmode='relative'                    
                     )
     fig = dict(data=data_piv, layout=layout )
@@ -629,6 +666,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
         
     layout = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversations status'),
+                    hovermode = 'closest',
                     xaxis=dict(title='Date')                
                     )
     fig = dict(data=data_piv, layout=layout)
@@ -644,7 +682,7 @@ def nonetagplot(inputdf, timeinterval,columnname,ofilename,silent=False):
         
     layout2 = Layout(title='Conversations not tagged in '+columnname+' (n = '+ str(numconversations) +') for last '+ plottf + ' ( '+str(tfstart)+' - '+str(tfend-pd.Timedelta('1 day'))+' )',
                     yaxis=dict(title='Conversation date'),
-                    xaxis=dict(title='Adminname'),barmode='relative'               
+                    xaxis=dict(title='Adminname'),barmode='relative',hovermode = 'closest'               
                     )
     fig = dict(data=data_piv2, layout=layout2)
     if not silent:
@@ -868,6 +906,7 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
                                 ] 
         layout=dict(   title='Weekly Email Distribution - ' + dfnametoprocess[idx],
                            showlegend= False,
+                           hovermode = 'closest',
                            annotations=annotations                     
                             )
         

@@ -230,7 +230,7 @@ def bintime(s,tunit,timebin,nanval):
          test5=pd.DataFrame([test3,test4]).transpose()
     '''
     for i in timebin[0:-1]:
-        if s == 'None' or type(s)==pd.tslib.NaTType:
+        if s == 'None' or pd.isnull(s):#type(s)==pd.tslib.NaTType:
             binval=nanval
             break
         if s <= np.timedelta64(i, tunit):#timeunits=s / np.timedelta64(1, unit)
