@@ -755,14 +755,14 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
         responsepivotdf=[[]for i in xrange(len(responsetoprocess))]
         sliceddf_resp=[[]for i in xrange(len(responsetoprocess))]
         uniqueconv_resp=[[]for i in xrange(len(responsetoprocess))]
-        within4hours_resp=[[]for i in xrange(len(responsetoprocess))]
-        over4hours_resp=[[]for i in xrange(len(responsetoprocess))]
+        within3hours_resp=[[]for i in xrange(len(responsetoprocess))]
+        over3hours_resp=[[]for i in xrange(len(responsetoprocess))]
                         
         try:                        
             for tfidx in responsetoprocess:
                 sliceddf_resp[tfidx], responsepivotdf[tfidx],uniqueconv_resp[tfidx]=generatetagpivtbl(df,'s_response_bin',tflist[tfidx],responsecolumnlabels)            
-                within4hours_resp[tfidx]=responsepivotdf[tfidx].iloc[-1][0:4].sum()#if timebins change this will go haywire!!!!!!!!
-                over4hours_resp[tfidx]=responsepivotdf[tfidx].iloc[-1][4:-1].sum()#if timebins change this will go haywire!!!!!!!!
+                within3hours_resp[tfidx]=responsepivotdf[tfidx].iloc[-1][0:3].sum()#if timebins change this will go haywire!!!!!!!!
+                over3hours_resp[tfidx]=responsepivotdf[tfidx].iloc[-1][3:-1].sum()#if timebins change this will go haywire!!!!!!!!
                 
                 if tfidx==0:
                     responsepivotdf[tfidx]['%']=responsepivotdf[tfidx]['Total'].apply(lambda s: float(s)/responsepivotdf[tfidx]['Total'][-1]*100)#get percentage of total for printing
@@ -812,12 +812,12 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
         #merge_range(first_row, first_col, last_row, last_col, data[, cell_format])
         worksheet.merge_range(responserow-1,1,responserow-1,7, 'No. of hours taken to Respond',merge_format)
         worksheet.write_string(responserow-1, 0,'Category')
-        within4hours=float(within4hours_resp[0])/responsepivotdf[0]['Total'][-1]*100
-        if within4hours:
-            worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
+        within3hours=float(within3hours_resp[0])/responsepivotdf[0]['Total'][-1]*100
+        if within3hours:
+            worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within3hours)+'% responded within 3hrs')
         else:
-            within4hours=0.00
-            worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within4hours)+'% responded within 4hrs')
+            within3hours=0.00
+            worksheet.write_string(responserow+len(responsepivotdf[0])+2, 4, "{:.2f}".format(within3hours)+'% responded within 3hrs')
             
         summaryrow=responserow+len(responsepivotdf[0])+3
         worksheet.write_string(summaryrow, 0,'Summary:')
@@ -857,7 +857,7 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
                    marker={'colors': ['rgb(0, 255, 0)',#0-1
                                       'rgb(60, 225, 60)',#1-2
                                       'rgb(90, 200, 90)',#2-3
-                                      'rgb(120, 175, 120)',#3-4
+                                      #'rgb(120, 175, 120)',#3-4
                                       'rgb(255, 175, 0)']}#4-5
                                              ),
                 Pie(labels=resolvecolumnlabels,#resolve_pie.keys(),
@@ -886,7 +886,7 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
                                 "size": 20
                             },
                             "showarrow": False,
-                            "text": "Response<br>"+"{:.2f}".format(within4hours)+"%<4h",
+                            "text": "Response<br>"+"{:.2f}".format(within3hours)+"%<3h",
                             "x": 0.190,
                             "y": tosplit*0.3+(1-tosplit*0.3)/2,
                             "xref":'paper',
@@ -916,14 +916,14 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
         
         
         if tosplit:
-            total_resp=[sum(x) for x in zip(within4hours_resp, over4hours_resp)]
-            percent_resp=[float(x)/y*100 for x,y in zip(within4hours_resp, total_resp)]
+            total_resp=[sum(x) for x in zip(within3hours_resp, over3hours_resp)]
+            percent_resp=[float(x)/y*100 for x,y in zip(within3hours_resp, total_resp)]
             
             #need to reverse the lists for output and skip first value
-            within4hoursbar = Bar(x=prev4label, y=within4hours_resp[::-1], name='Within 4 hours', xaxis='x2', yaxis='y2')
-            data.append(within4hoursbar)
-            over4hoursbar = Bar(x=prev4label, y=over4hours_resp[::-1], name='Over 4 hours', xaxis='x2', yaxis='y2')
-            data.append(over4hoursbar)
+            within3hoursbar = Bar(x=prev4label, y=within3hours_resp[::-1], name='Within 3 hours', xaxis='x2', yaxis='y2')
+            data.append(within3hoursbar)
+            over3hoursbar = Bar(x=prev4label, y=over3hours_resp[::-1], name='Over 3 hours', xaxis='x2', yaxis='y2')
+            data.append(over3hoursbar)
             '''
             avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
                                      name='Average Response time',yaxis='y2')    
@@ -938,7 +938,7 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
             layout['barmode']='relative'
             
             annotationsbar=[dict(x=xi,y=yi,
-                                 text="{:.2f}".format(zi)+"%<4hrs",
+                                 text="{:.2f}".format(zi)+"%<3hrs",
                                  xanchor='center',
                                  yanchor='bottom',                                 
                                  showarrow=False,
