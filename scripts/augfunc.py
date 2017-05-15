@@ -69,7 +69,8 @@ def changenonetotimedeltazero(s):
 def changenattotimedeltazero(s):
     """Convert NaTType to timedelta(0)
     """
-    if type(s)==pd.tslib.NaTType:
+    #if type(s)==pd.tslib.NaTType:
+    if pd.isnull(s):
         return pd.Timedelta(0)
     else:
         return s
@@ -77,7 +78,7 @@ def changenattotimedeltazero(s):
 def parsingconvtext(retrievedtext,customtextlist):
     """Sanitize text by removing common text strings and that in customtextlist
     """
-    if not retrievedtext: #in case empty text
+    if not retrievedtext: #in case empty text         
         retrievedtext=changenonetostr(retrievedtext)
     newtext=BeautifulSoup(retrievedtext).get_text() 
         #newtext=changenonetostr(retrievedtext)
