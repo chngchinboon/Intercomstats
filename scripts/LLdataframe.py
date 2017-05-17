@@ -516,11 +516,14 @@ if rebuild[0]:
             conv.append(conv_part)
               
             #Just in case the constant requests trigger api limits.                
-            ratelimit=intercom.rate_limit_details
-            if ratelimit['remaining']<25:
-                print('Current rate: %d. Sleeping for 1 min' %ratelimit['remaining'])
-                time.sleep(60)           
-                print('Resuming.....')
+            ratelimit=intercom.rate_limit_details            
+            try: 
+                if ratelimit['remaining']<25:
+                    print('Current rate: %d. Sleeping for 1 min' %ratelimit['remaining'])
+                    time.sleep(60)           
+                    print('Resuming.....')
+            except KeyError:
+                continue
                
         itercounter+=1
           
@@ -608,10 +611,12 @@ if rebuild[1]:
         toaugment['numissues']=toaugment.issue.apply(lambda s: af.countissue(s))    
          
         #bintime for pivot tables
-        responsebinlist=[0,1,2,3,4,365*24]
+        #responsebinlist=[0,1,2,3,4,365*24]
+        responsebinlist=[0,1,2,3,365*24]
         resolvebinlist=[0,1,2,3,4,12,24,365*24]
         #toaugment['s_response_bin']=toaugment.s_to_first_response.apply(lambda s: af.bintime(s,'h',responsebinlist,0))
-        responsecolumnlabels=['0-1','1-2','2-3','3-4','>4','UN']
+        #responsecolumnlabels=['0-1','1-2','2-3','3-4','>4','UN']
+        responsecolumnlabels=['0-1','1-2','2-3','>3','UN']        
         resolvecolumnlabels=['0-1','1-2', '2-3','3-4','4-12','12-24','>24','UN']
                            
         #bin response
