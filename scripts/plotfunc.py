@@ -920,10 +920,15 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
             percent_resp=[float(x)/y*100 for x,y in zip(within3hours_resp, total_resp)]
             
             #need to reverse the lists for output and skip first value
-            within3hoursbar = Bar(x=prev4label, y=within3hours_resp[::-1], name='Within 3 hours', xaxis='x2', yaxis='y2')
+            within3hoursbar = Bar(x=prev4label, y=within3hours_resp[::-1], name='Within 3 hours', xaxis='x2', yaxis='y2',opacity=0.8)
             data.append(within3hoursbar)
-            over3hoursbar = Bar(x=prev4label, y=over3hours_resp[::-1], name='Over 3 hours', xaxis='x2', yaxis='y2')
+            over3hoursbar = Bar(x=prev4label, y=over3hours_resp[::-1], name='Over 3 hours', xaxis='x2', yaxis='y2',opacity=0.8)
             data.append(over3hoursbar)
+            percentscatter=Scatter(    x=prev4label, y=percent_resp[::-1], mode = 'lines+markers',
+                                       line=dict(color='rgb(240, 210, 0)',width = 4),
+                                       name='%<3hrs',yaxis='y3',xaxis='x2'#, textposition='top',text=["{:.2f}".format(x)+'%' for x in percent_resp[::-1]]
+                   )
+            data.append(percentscatter)
             '''
             avgresponse = Scatter(x=day_piv.columns, y=mean_piv/3600.0,
                                      name='Average Response time',yaxis='y2')    
@@ -936,14 +941,24 @@ def agpgen(inputdf, timeinterval,ofilename,responsecolumnlabels,resolvecolumnlab
             layout['yaxis2']=dict(title='Conversations',domain=[0, 0.25], anchor='x2')
             layout['xaxis2']=dict(title='Time',domain=[0.05, 0.95], anchor='y2')
             layout['barmode']='relative'
-            
+            layout['yaxis3']=dict(title='% < 3hrs',anchor='x2',overlaying='y2', side='right')
+            '''
             annotationsbar=[dict(x=xi,y=yi,
                                  text="{:.2f}".format(zi)+"%<3hrs",
                                  xanchor='center',
                                  yanchor='bottom',                                 
                                  showarrow=False,
                                  ) for xi, yi, zi in zip(prev4label, total_resp[::-1],percent_resp[::-1])]
-            
+            '''
+            annotationsbar=[dict(x=xi,y=yi+2,
+                                 text="{:.2f}".format(zi)+"%<3hrs",
+                                 font=dict(size=14),
+                                 xref='x2',
+                                 yref='y3',
+                                 xanchor='center',
+                                 yanchor='bottom',                                 
+                                 showarrow=False,
+                                 ) for xi, yi, zi in zip(prev4label, percent_resp[::-1],percent_resp[::-1])]
             layout['annotations']=annotations+annotationsbar
                             
                             #yaxis2=dict(title='Time(hours)',titlefont=dict(color='rgb(148, 103, 189)'),
