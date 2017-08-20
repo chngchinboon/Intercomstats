@@ -373,31 +373,36 @@ if rebuild[1]:
                pass  
                     
           userid=row.user
-          try:
-              idxdf=userdf['id']==userid#count number of occurance
-          except TypeError:#incase idxdf is empty
-              idxdf=[0]
-          if sum(idxdf)>1:#duplicate user entry. need to purge
-               print('Duplicate user entry found. Please check csv/intercom')
-       
-          if sum(idxdf)==0:#ask intercom
-               #print('Missing user '+str(userid)+'  from dataframe. Retrieving from Intercom instead')                                      
-               userdetails=intercom.users.find(id=userid).__dict__.copy()    #convert to dict for storage into df
-               #convert to df for merging
-               userdetails=pd.DataFrame([userdetails])#need to place in list mode. possible source of error
-               #convert datetime attributes to datetime objects
-               for attr in userdatetimeattrlist:
-                    userdetails[attr]=pd.to_datetime(userdetails[attr],unit='s')
-               #append to userdf               
-               userdf=userdf.append(userdetails,ignore_index=True)               
-               missinguserdf+=1  
-               #userdetails=userdetails[['name','email']].iloc[0].tolist()
-          else:#to handle multiple userid in userdf!!!!!! shouldn't be the case!!
-               userdetails=userdf[userdf['id']==userid]#.iloc[0]#.to_dict()#found in df, extract values out
-               #userdetails=userdetails[['name','email']].tolist()
-               #userdetails=userdetails[userdetails.keys()[0]]#format may be different. possible source of errors!!!!!!!!!!!!!!!! keys used because method returns a series
-                    
-          df.append(userdetails[['name','email']].iloc[0].tolist())
+          
+          if row.user!=None:
+              try:
+                  idxdf=userdf['id']==userid#count number of occurance
+              except TypeError:#incase idxdf is empty
+                  idxdf=[0]
+              if sum(idxdf)>1:#duplicate user entry. need to purge
+                   print('Duplicate user entry found. Please check csv/intercom')
+           
+              if sum(idxdf)==0:#ask intercom
+                   #print('Missing user '+str(userid)+'  from dataframe. Retrieving from Intercom instead')                                      
+                   userdetails=intercom.users.find(id=userid).__dict__.copy()    #convert to dict for storage into df
+                   #convert to df for merging
+                   userdetails=pd.DataFrame([userdetails])#need to place in list mode. possible source of error
+                   #convert datetime attributes to datetime objects
+                   for attr in userdatetimeattrlist:
+                        userdetails[attr]=pd.to_datetime(userdetails[attr],unit='s')
+                   #append to userdf               
+                   userdf=userdf.append(userdetails,ignore_index=True)               
+                   missinguserdf+=1  
+                   #userdetails=userdetails[['name','email']].iloc[0].tolist()
+              else:#to handle multiple userid in userdf!!!!!! shouldn't be the case!!
+                   userdetails=userdf[userdf['id']==userid]#.iloc[0]#.to_dict()#found in df, extract values out
+                   #userdetails=userdetails[['name','email']].tolist()
+                   #userdetails=userdetails[userdetails.keys()[0]]#format may be different. possible source of errors!!!!!!!!!!!!!!!! keys used because method returns a series
+              df.append(userdetails[['name','email']].iloc[0].tolist())
+          else:#handle empty user
+              print('Found empty user!!!')#need to troubleshoot #possibly deleted user/admin
+              df.append(['None','None'])
+                        
           itercounter+=1
           
           #df=pd.Series([dict(username=userdetails.get('name'),email=userdetails.get('email'),role=userdetails.get('role'))])
@@ -457,12 +462,16 @@ if rebuild[0]:
         conv_message['author']=conv_message['author'].id
         conv_message['tags']=convobj.tags
         if conv_message['tags']:
-            temptaglist=[]
-            for numtag in conv_message['tags']:
-                temptagid=numtag.id
-                temptaglist.append(tagdf['name'][tagdf['id']==temptagid].item())                         
-            #conv_message['tags']=','.join(temptaglist) #incase need to convert to strlist
-            conv_message['tags']=temptaglist
+            #convert from list of tag objects into a list of tag names
+            conv_message['tags']=[temptagid.name for temptagid in conv_message['tags']]
+
+            #temptaglist=[]
+            #for numtag in conv_message['tags']:
+            #    temptagid=numtag.id
+            #    temptaglist.append(tagdf['name'][tagdf['id']==temptagid].item())                         
+            ##conv_message['tags']=','.join(temptaglist) #incase need to convert to strlist
+            #conv_message['tags']=temptaglist
+
         conv_message['body']=af.parsingconvtext(conv_message['body'],texttoremove)          
           
         #useless attributes
