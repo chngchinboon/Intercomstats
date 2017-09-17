@@ -863,3 +863,8 @@ if output:
     groupedbyadminstats.to_csv(groupbyadmintatsf,sep='\t', encoding="utf-8")
     groupedbyadmindatesummary.to_csv('summary.csv',sep='\t', encoding="utf-8")
     '''
+    pltf.zip_dir(os.path.abspath(os.path.join(outputfolder,foldername)))
+    
+    
+    #intercom.conversations.find_all(after='1505063464')
+    #timeframe=int((timenow-datetime.timedelta(7)-datetime.datetime(1970,1,1)).total_seconds())

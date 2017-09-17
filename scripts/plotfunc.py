@@ -8,6 +8,7 @@ import pandas as pd
 import datetime
 import numpy as np
 import augfunc as af
+
 #import xlsxwriter
 
 from plotly.offline import download_plotlyjs, plot
@@ -216,7 +217,16 @@ def overallresponsestatplot(rawinputdf,timeinterval,ofilename,silent=False):
         numassignstr='Number of assignments: '+str(row.numassign)
         numclosedstr='Number of closed: '+str(row.numclosed)
         numopenstr='Number of opened: '+str(row.numopened)
-        schoolstr='School: ' + str(row.school)
+        #schoolstr='School: ' + str(row.school).encode('utf-8')
+        try:
+            schoolstr='School: ' + row.school.encode('utf-8')
+        except AttributeError:
+            if type(row.school)==list:                                                
+                row.school=[sch.encode('utf-8') for sch in row.school]
+                schoolstr='School: ' + ', '.join(row.school)                
+            else: 
+                print('attrib error')
+                continue
         issuestr='Issues: ' + str(row.issue)
         if bool(row.open):            
             currstatus='Current status: Open'
@@ -354,11 +364,23 @@ def curropenconvplot(inputdf,ofilename,silent=False):
         else:
             issuecount=1
         
-        schoolstr='School: ' + str(row.school)
-        issuestr='Issues: ' + str(row.issue)
+        #schoolstr='School: ' + str(row.school)
+        #schoolstr='School: ' + row.school.encode('utf-8')
+        try:
+            schoolstr='School: ' + row.school.encode('utf-8')
+        except AttributeError:
+            if type(row.school)==list:                                                
+                row.school=[sch.encode('utf-8') for sch in row.school]
+                schoolstr='School: ' + ', '.join(row.school)                
+            else: 
+                print('attrib error')
+                continue
+        #issuestr='Issues: ' + str(row.issue)
+        issuestr='Issues: ' + row.issue.encode('utf-8')
         
         try: 
-             usernamestr='Username: ' + str(row.username.encode('utf-8'))
+             #usernamestr='Username: ' + str(row.username.encode('utf-8'))
+             usernamestr='Username: ' + row.username.encode('utf-8')
         except AttributeError:
              usernamestr='Username: ' + str(row.username)
         emailstr='Email: ' + str(row.email)        
@@ -1023,7 +1045,8 @@ def genstatadmin(inputdf,ofilefolder,silent=True):
             numnotestr='Number of notes: '+str(row.numnote)
             numassignstr='Number of assignments: '+str(row.numassign)
             numclosedstr='Number of closed: '+str(row.numclosed)
-            schoolstr='School: ' + str(row.school)
+            #schoolstr='School: ' + str(row.school).encode('utf-8')
+            schoolstr='School: ' + row.school.encode('utf-8')            
             issuestr='Issues: ' + str(row.issue)
             try: 
                  usernamestr='Username: ' + str(row.username.encode('utf-8'))
@@ -1078,3 +1101,18 @@ def genstatadmin(inputdf,ofilefolder,silent=True):
              plot(fig,filename=ofilefolder+i+'.html')
         else:
              plot(fig,filename=ofilefolder+i+'.html',auto_open=False)
+
+#%%             
+import zipfile         
+import os.path
+
+def zip_dir(path_dir, path_file_zip=''):
+    if not path_file_zip:
+        path_file_zip = os.path.join(os.path.dirname(path_dir), os.path.basename(path_dir)+'.zip')
+    with zipfile.ZipFile(path_file_zip, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(path_dir):
+            for file_or_dir in files + dirs:
+                zip_file.write(
+                    os.path.join(root, file_or_dir),
+                    os.path.relpath(os.path.join(root, file_or_dir),
+                                    os.path.join(path_dir, os.path.pardir)))
